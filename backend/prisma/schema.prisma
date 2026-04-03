@@ -56,6 +56,27 @@ model Tenant {
   @@map("tenants")
 }
 
+model Unidade {
+  id          String    @id @default(uuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  nome        String
+  endereco    String?
+  cidade      String?
+  estado      String?
+  cep         String?
+  telefone    String?
+  email       String?
+  responsavelId String?
+  ativa       Boolean   @default(true)
+  criadoEm   DateTime  @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  usuarios    Usuario[]
+
+  @@map("unidades")
+}
+
 model Assinatura {
   id          String    @id @default(uuid())
   tenantId    String
@@ -86,11 +107,39 @@ model Usuario {
   areasAtuacao        String[]
   ativo               Boolean   @default(true)
   emailVerificado     Boolean   @default(false)
+  telefoneVerificado  Boolean   @default(false)
+  
+  // Autenticação 2FA
+  twoFactorEnabled    Boolean   @default(false)
+  twoFactorSecret     String?
+  
+  // Biometria/WebAuthn
   webauthnCredentials Json?
+  
+  // Controle de acesso
+  ultimoLogin         DateTime?
+  ultimoIp            String?
+  tentativasFalhas    Int       @default(0)
+  bloqueadoAte      DateTime?
+  
+  // Hierarquia
+  cargo               String?
+  supervisorId        String?
+  supervisor          Usuario?  @relation("Supervisao", fields: [supervisorId], references: [id])
+  subordinados        Usuario[] @relation("Supervisao")
+  
+  // Unidade (para escritórios multi-unidade)
+  unidadeId           String?
+  unidade             Unidade?  @relation(fields: [unidadeId], references: [id])
+  
+  // Permissões customizadas (override do role)
+  permissoes          Json?
+  
   criadoEm          DateTime  @default(now())
   atualizadoEm      DateTime  @updatedAt
 
   sessoes        Sessao[]
+  dispositivos   Dispositivo[]
   agendaEventos  AgendaEvento[]
   processosAdv   AdvogadoProcesso[]
   diligencias    Diligencia[]
@@ -109,10 +158,31 @@ model Sessao {
   usuarioId    String
   usuario      Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
   refreshToken String   @unique
+  deviceInfo   String?
+  ipAddress    String?
+  userAgent    String?
   expiresAt    DateTime
+  revokedAt    DateTime?
   criadoEm    DateTime @default(now())
 
   @@map("sessoes")
+}
+
+model Dispositivo {
+  id          String    @id @default(uuid())
+  usuarioId   String
+  usuario     Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  nome        String
+  tipo        String    // mobile, desktop, tablet
+  fingerprint String    @unique
+  userAgent   String?
+  ipUltimo    String?
+  ultimoAcesso DateTime @default(now())
+  confiavel   Boolean   @default(false)
+  ativo       Boolean   @default(true)
+  criadoEm   DateTime  @default(now())
+
+  @@map("dispositivos")
 }
 
 // ==================== CLIENTES ====================

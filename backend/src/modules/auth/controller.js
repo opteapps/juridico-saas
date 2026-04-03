@@ -1,12 +1,25 @@
 import bcrypt from 'bcryptjs'
-import { v4 as uuidv4 } from 'uuid'
+import { authService } from '../../services/authService.js'
+import { auditService } from '../../services/auditService.js'
 import { prisma } from '../../database/prisma.js'
 import { z } from 'zod'
 
 const loginSchema = z.object({
   email: z.string().email(),
   senha: z.string().min(6),
-  tenantId: z.string().uuid().optional(),
+  deviceInfo: z.object({
+    name: z.string().optional(),
+    type: z.string().optional(),
+  }).optional(),
+})
+
+const twoFactorSchema = z.object({
+  userId: z.string().uuid(),
+  code: z.string().length(6),
+  deviceInfo: z.object({
+    name: z.string().optional(),
+    type: z.string().optional(),
+  }).optional(),
 })
 
 const registerSchema = z.object({
@@ -18,194 +31,368 @@ const registerSchema = z.object({
   planoId: z.string().uuid().optional(),
 })
 
-function parseArrayFields(obj) {
-  if (!obj) return obj
-  const result = { ...obj }
-  if (typeof result.areasAtuacao === 'string') result.areasAtuacao = JSON.parse(result.areasAtuacao || '[]')
-  if (typeof result.areas === 'string') result.areas = JSON.parse(result.areas || '[]')
-  if (typeof result.tags === 'string') result.tags = JSON.parse(result.tags || '[]')
-  return result
-}
-
 export const authController = {
+  /**
+   * Login com email/senha
+   * Suporta 2FA e verificação de dispositivo
+   */
   async login(request, reply) {
-    const { email, senha, tenantId } = loginSchema.parse(request.body)
-    
-    const usuario = await prisma.usuario.findFirst({
-      where: {
-        email: email.toLowerCase(),
-        ativo: true,
-        ...(tenantId ? { tenantId } : {}),
-      },
-      include: { tenant: { select: { id: true, nome: true, ativo: true } } },
-    })
-    
-    if (!usuario) {
-      return reply.status(401).send({ error: 'Credenciais inválidas' })
-    }
-    
-    if (usuario.tenant && !usuario.tenant.ativo) {
-      return reply.status(403).send({ error: 'Escritório suspenso. Entre em contato com o suporte.' })
-    }
-    
-    const senhaValida = await bcrypt.compare(senha, usuario.senha)
-    if (!senhaValida) {
-      return reply.status(401).send({ error: 'Credenciais inválidas' })
-    }
-    
-    const accessToken = request.server.jwt.sign(
-      { userId: usuario.id, tenantId: usuario.tenantId, role: usuario.role },
-      { expiresIn: '15m' }
-    )
-    
-    const refreshToken = uuidv4()
-    await prisma.sessao.create({
-      data: {
-        usuarioId: usuario.id,
-        refreshToken,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
-      },
-    })
-    
-    // Audit log
-    await prisma.auditLog.create({
-      data: {
-        tenantId: usuario.tenantId,
-        usuarioId: usuario.id,
-        acao: 'LOGIN',
-        entidade: 'Usuario',
-        entidadeId: usuario.id,
-        ip: request.ip,
-      },
-    })
-    
-    return {
-      accessToken,
-      refreshToken,
-      usuario: parseArrayFields({
-        id: usuario.id,
-        nome: usuario.nome,
-        email: usuario.email,
-        role: usuario.role,
-        tenantId: usuario.tenantId,
-        tenant: usuario.tenant,
-        areasAtuacao: usuario.areasAtuacao,
-        avatarUrl: usuario.avatarUrl,
-      }),
+    try {
+      const { email, senha, deviceInfo } = loginSchema.parse(request.body)
+      const ipAddress = request.ip
+      const userAgent = request.headers['user-agent']
+
+      const result = await authService.login(email, senha, deviceInfo, ipAddress, userAgent)
+
+      // Se precisa de 2FA ou verificação de dispositivo
+      if (result.requiresTwoFactor || result.requiresDeviceVerification) {
+        return reply.send(result)
+      }
+
+      // Assina o token JWT
+      const accessToken = request.server.jwt.sign(
+        { 
+          userId: result.user.id, 
+          tenantId: result.user.tenantId, 
+          role: result.user.role 
+        },
+        { expiresIn: '15m' }
+      )
+
+      return reply.send({
+        success: true,
+        accessToken,
+        refreshToken: result.tokens.refreshToken,
+        expiresIn: result.tokens.expiresIn,
+        usuario: result.user,
+      })
+    } catch (error) {
+      console.error('Login error:', error)
+      return reply.status(401).send({ error: error.message || 'Credenciais inválidas' })
     }
   },
 
+  /**
+   * Verifica código 2FA
+   */
+  async verifyTwoFactor(request, reply) {
+    try {
+      const { userId, code, deviceInfo } = twoFactorSchema.parse(request.body)
+      const ipAddress = request.ip
+      const userAgent = request.headers['user-agent']
+
+      const result = await authService.verifyTwoFactor(userId, code, deviceInfo, ipAddress, userAgent)
+
+      // Assina o token JWT
+      const accessToken = request.server.jwt.sign(
+        { 
+          userId: result.user.id, 
+          tenantId: result.user.tenantId, 
+          role: result.user.role 
+        },
+        { expiresIn: '15m' }
+      )
+
+      return reply.send({
+        success: true,
+        accessToken,
+        refreshToken: result.tokens.refreshToken,
+        expiresIn: result.tokens.expiresIn,
+        usuario: result.user,
+      })
+    } catch (error) {
+      return reply.status(401).send({ error: error.message })
+    }
+  },
+
+  /**
+   * Configura 2FA
+   */
+  async setupTwoFactor(request, reply) {
+    try {
+      const userId = request.usuario.id
+      const setup = await authService.setupTwoFactor(userId)
+      return reply.send(setup)
+    } catch (error) {
+      return reply.status(500).send({ error: error.message })
+    }
+  },
+
+  /**
+   * Confirma ativação do 2FA
+   */
+  async confirmTwoFactor(request, reply) {
+    try {
+      const userId = request.usuario.id
+      const { code } = request.body
+      
+      const result = await authService.confirmTwoFactor(userId, code)
+      return reply.send(result)
+    } catch (error) {
+      return reply.status(400).send({ error: error.message })
+    }
+  },
+
+  /**
+   * Desativa 2FA
+   */
+  async disableTwoFactor(request, reply) {
+    try {
+      const userId = request.usuario.id
+      const { password } = request.body
+      
+      const result = await authService.disableTwoFactor(userId, password)
+      return reply.send(result)
+    } catch (error) {
+      return reply.status(400).send({ error: error.message })
+    }
+  },
+
+  /**
+   * Verifica dispositivo
+   */
+  async verifyDevice(request, reply) {
+    try {
+      const { userId, token } = request.body
+      const result = await authService.verifyDevice(userId, token)
+      return reply.send(result)
+    } catch (error) {
+      return reply.status(400).send({ error: error.message })
+    }
+  },
+
+  /**
+   * Lista dispositivos do usuário
+   */
+  async listDevices(request, reply) {
+    try {
+      const userId = request.usuario.id
+      const devices = await authService.listDevices(userId)
+      return reply.send({ devices })
+    } catch (error) {
+      return reply.status(500).send({ error: error.message })
+    }
+  },
+
+  /**
+   * Revoga dispositivo
+   */
+  async revokeDevice(request, reply) {
+    try {
+      const userId = request.usuario.id
+      const { deviceId } = request.params
+      
+      const result = await authService.revokeDevice(userId, deviceId)
+      return reply.send(result)
+    } catch (error) {
+      return reply.status(400).send({ error: error.message })
+    }
+  },
+
+  /**
+   * Logout de todos os dispositivos
+   */
+  async logoutAllDevices(request, reply) {
+    try {
+      const userId = request.usuario.id
+      const result = await authService.logoutAllDevices(userId)
+      return reply.send(result)
+    } catch (error) {
+      return reply.status(500).send({ error: error.message })
+    }
+  },
+
+  /**
+   * Registro de novo escritório
+   */
   async register(request, reply) {
-    const data = registerSchema.parse(request.body)
-    
-    // Check if email already exists
-    const existente = await prisma.usuario.findFirst({
-      where: { email: data.email.toLowerCase(), tenantId: null },
-    })
-    if (existente) {
-      return reply.status(409).send({ error: 'Email já cadastrado' })
+    try {
+      const data = registerSchema.parse(request.body)
+      
+      // Verifica se email já existe
+      const existente = await prisma.usuario.findFirst({
+        where: { email: data.email.toLowerCase(), tenantId: null },
+      })
+      
+      if (existente) {
+        return reply.status(409).send({ error: 'Email já cadastrado' })
+      }
+      
+      // Busca plano
+      const plano = data.planoId
+        ? await prisma.plano.findUnique({ where: { id: data.planoId } })
+        : await prisma.plano.findFirst({ where: { ativo: true }, orderBy: { preco: 'asc' } })
+      
+      if (!plano) {
+        return reply.status(400).send({ error: 'Plano não encontrado' })
+      }
+      
+      const senha = await bcrypt.hash(data.senha, 12)
+      
+      const result = await prisma.$transaction(async (tx) => {
+        const tenant = await tx.tenant.create({
+          data: {
+            nome: data.nomeEscritorio,
+            cnpj: data.cnpj,
+            email: data.email.toLowerCase(),
+            planoId: plano.id,
+          },
+        })
+        
+        const usuario = await tx.usuario.create({
+          data: {
+            tenantId: tenant.id,
+            nome: data.nome,
+            email: data.email.toLowerCase(),
+            senha,
+            role: 'admin_escritorio',
+            emailVerificado: false,
+          },
+        })
+        
+        await tx.assinatura.create({
+          data: { tenantId: tenant.id, planoId: plano.id },
+        })
+        
+        return { tenant, usuario }
+      })
+      
+      await auditService.log(result.usuario.id, 'REGISTER', 'Tenant', result.tenant.id, {
+        tenantId: result.tenant.id,
+      })
+      
+      return reply.status(201).send({
+        message: 'Escritório criado com sucesso',
+        tenantId: result.tenant.id,
+        usuarioId: result.usuario.id,
+      })
+    } catch (error) {
+      console.error('Register error:', error)
+      return reply.status(400).send({ error: error.message })
     }
-    
-    // Get default plan
-    const plano = data.planoId
-      ? await prisma.plano.findUnique({ where: { id: data.planoId } })
-      : await prisma.plano.findFirst({ where: { ativo: true }, orderBy: { preco: 'asc' } })
-    
-    if (!plano) {
-      return reply.status(400).send({ error: 'Plano não encontrado' })
-    }
-    
-    const senha = await bcrypt.hash(data.senha, 12)
-    
-    const result = await prisma.$transaction(async (tx) => {
-      const tenant = await tx.tenant.create({
-        data: {
-          nome: data.nomeEscritorio,
-          cnpj: data.cnpj,
-          email: data.email.toLowerCase(),
-          planoId: plano.id,
-        },
-      })
-      
-      const usuario = await tx.usuario.create({
-        data: {
-          tenantId: tenant.id,
-          nome: data.nome,
-          email: data.email.toLowerCase(),
-          senha,
-          role: 'admin_escritorio',
-        },
-      })
-      
-      await tx.assinatura.create({
-        data: { tenantId: tenant.id, planoId: plano.id },
-      })
-      
-      return { tenant, usuario }
-    })
-    
-    return reply.status(201).send({
-      message: 'Escritório criado com sucesso',
-      tenantId: result.tenant.id,
-      usuarioId: result.usuario.id,
-    })
   },
 
+  /**
+   * Refresh token
+   */
   async refresh(request, reply) {
-    const { refreshToken } = request.body
-    if (!refreshToken) return reply.status(400).send({ error: 'Refresh token obrigatório' })
-    
-    const sessao = await prisma.sessao.findUnique({
-      where: { refreshToken },
-      include: { usuario: true },
-    })
-    
-    if (!sessao || sessao.expiresAt < new Date()) {
-      return reply.status(401).send({ error: 'Refresh token inválido ou expirado' })
+    try {
+      const { refreshToken } = request.body
+      
+      if (!refreshToken) {
+        return reply.status(400).send({ error: 'Refresh token obrigatório' })
+      }
+      
+      const result = await authService.refreshTokens(refreshToken)
+      
+      const accessToken = request.server.jwt.sign(
+        { 
+          userId: result.user.id, 
+          tenantId: result.user.tenantId, 
+          role: result.user.role 
+        },
+        { expiresIn: '15m' }
+      )
+      
+      return reply.send({ 
+        accessToken, 
+        refreshToken: result.tokens.refreshToken,
+        usuario: result.user,
+      })
+    } catch (error) {
+      return reply.status(401).send({ error: error.message })
     }
-    
-    const accessToken = request.server.jwt.sign(
-      { userId: sessao.usuario.id, tenantId: sessao.usuario.tenantId, role: sessao.usuario.role },
-      { expiresIn: '15m' }
-    )
-    
-    return { accessToken }
   },
 
+  /**
+   * Logout
+   */
   async logout(request, reply) {
     const { refreshToken } = request.body
+    
     if (refreshToken) {
       await prisma.sessao.deleteMany({ where: { refreshToken } })
     }
-    return { message: 'Logout realizado' }
+    
+    await auditService.log(request.usuario?.id, 'LOGOUT', 'Usuario', request.usuario?.id, {
+      tenantId: request.usuario?.tenantId,
+    })
+    
+    return reply.send({ message: 'Logout realizado' })
   },
 
+  /**
+   * Dados do usuário logado
+   */
   async me(request, reply) {
     const usuario = await prisma.usuario.findUnique({
       where: { id: request.usuario.id },
       select: {
-        id: true, nome: true, email: true, role: true, oab: true,
-        telefone: true, avatarUrl: true, areasAtuacao: true, tenantId: true,
-        tenant: { select: { id: true, nome: true, logoUrl: true, plano: true } },
+        id: true,
+        nome: true,
+        email: true,
+        role: true,
+        oab: true,
+        telefone: true,
+        avatarUrl: true,
+        areasAtuacao: true,
+        tenantId: true,
+        twoFactorEnabled: true,
+        ultimoLogin: true,
+        cargo: true,
+        tenant: { 
+          select: { 
+            id: true, 
+            nome: true, 
+            logoUrl: true, 
+            plano: true 
+          } 
+        },
       },
     })
-    return parseArrayFields(usuario)
+    
+    return reply.send(usuario)
   },
 
+  /**
+   * Recuperação de senha
+   */
   async forgotPassword(request, reply) {
-    // TODO: implement email sending
-    return { message: 'Se o email existir, você receberá as instruções de recuperação' }
+    const { email } = request.body
+    
+    // TODO: Implementar envio de email
+    // Por segurança, sempre retorna sucesso mesmo se email não existir
+    
+    await auditService.log(null, 'FORGOT_PASSWORD_REQUEST', 'Usuario', null, {
+      email: auditService.maskEmail(email),
+    })
+    
+    return reply.send({ 
+      message: 'Se o email existir, você receberá as instruções de recuperação' 
+    })
   },
 
+  /**
+   * Reset de senha
+   */
   async resetPassword(request, reply) {
-    return { message: 'Senha alterada com sucesso' }
+    // TODO: Implementar com token de reset
+    return reply.send({ message: 'Senha alterada com sucesso' })
   },
 
+  /**
+   * WebAuthn - início de registro
+   */
   async webauthnRegister(request, reply) {
-    return { message: 'WebAuthn registration initiated' }
+    // TODO: Implementar WebAuthn
+    return reply.send({ message: 'WebAuthn registration initiated' })
   },
 
+  /**
+   * WebAuthn - autenticação
+   */
   async webauthnAuthenticate(request, reply) {
-    return { message: 'WebAuthn authentication' }
+    // TODO: Implementar WebAuthn
+    return reply.send({ message: 'WebAuthn authentication' })
   },
 }
