@@ -18,4 +18,4 @@ COPY . .
 EXPOSE 3001
 
 # Aplica migrações e inicia o servidor
-CMD ["sh", "-c", "npx prisma migrate deploy && node src/server.js"]
+CMD ["sh", "-c", "npx prisma db push --accept-data-loss 2>&1 && echo '=== STARTING SERVER ===' && node src/server.js 2>&1"]
