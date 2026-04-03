@@ -91,6 +91,21 @@ await app.register(superAdminRoutes, { prefix: `${apiPrefix}/super-admin` })
 // Health check
 app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }))
 
+// Seed endpoint — protegido por secret, uso único
+app.post('/setup/seed', async (request, reply) => {
+  const secret = request.headers['x-setup-secret']
+  if (secret !== (process.env.SETUP_SECRET || 'juridico-setup-2024')) {
+    return reply.status(403).send({ error: 'Acesso negado' })
+  }
+  try {
+    const { seedDatabase } = await import('./database/seeds/index.js')
+    await seedDatabase()
+    return { ok: true, message: 'Seed executado com sucesso' }
+  } catch (err) {
+    return reply.status(500).send({ error: err.message })
+  }
+})
+
 // Error handler
 app.setErrorHandler(errorHandler)
 
