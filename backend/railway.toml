@@ -1,10 +1,10 @@
-# railway.toml — Backend
+# railway.toml -- Backend
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "npx prisma db push --accept-data-loss 2>&1 && echo '=== STARTING SERVER ===' && node src/server.js 2>&1"
+startCommand = "node src/server.js"
 healthcheckPath = "/health"
 healthcheckTimeout = 90
 restartPolicyType = "ON_FAILURE"
