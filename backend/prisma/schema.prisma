@@ -79,6 +79,9 @@ model Tenant {
   documentosInternos DocumentoInterno[]
   metasUsuarios  MetaUsuario[]
   produtividade  Produtividade[]
+  leads          Lead[]
+  propostas      PropostaComercial[]
+  atendimentos   Atendimento[]
 
   @@map("tenants")
 }
@@ -122,6 +125,7 @@ model AreaAtuacao {
 
   especialidades Especialidade[]
   processos      Processo[]
+  leads          Lead[]
 
   @@unique([nome, tenantId])
   @@map("areas_atuacao")
@@ -775,6 +779,173 @@ model Produtividade {
 
   @@unique([usuarioId, data])
   @@map("produtividade")
+}
+
+// ==================== CRM JURÍDICO ====================
+
+model Lead {
+  id                String    @id @default(uuid())
+  tenantId          String
+  tenant            Tenant    @relation(fields: [tenantId], references: [id])
+  
+  // Dados do lead
+  nome              String
+  email             String?
+  telefone          String
+  telefoneAlternativo String?
+  cpfCnpj           String?
+  
+  // Origem e canal
+  origem            String    // site, indicacao, redes_sociais, parceiro, walk_in, etc
+  canalAquisicao    String?   // google_ads, facebook, instagram, etc
+  campanha          String?   // nome da campanha
+  
+  // Classificação
+  areaAtuacaoId     String?
+  areaAtuacao       AreaAtuacao? @relation(fields: [areaAtuacaoId], references: [id])
+  urgencia          String    @default("normal") // baixa, normal, alta, critica
+  potencialFinanceiro String?   // baixo, medio, alto, premium
+  valorEstimado     Decimal?  @db.Decimal(15, 2)
+  
+  // Descrição do caso
+  descricaoCaso     String?
+  dadosFormulario   Json?     // respostas do formulário inicial
+  documentosNecessarios Json? // checklist de documentos
+  
+  // Pipeline
+  status            String    @default("novo") // novo, em_contato, triagem, proposta_enviada, negociacao, contrato_pendente, fechado, perdido
+  motivoPerda       String?   // nao_respondeu, preco, escolheu_concorrente, nao_tem_caso, etc
+  
+  // Responsáveis
+  responsavelId     String?
+  responsavel       Usuario?  @relation(fields: [responsavelId], references: [id])
+  distribuidoEm     DateTime?
+  
+  // Análise preliminar
+  analisePreliminar String?
+  risco             String?   // baixo, medio, alto
+  viabilidade       String?   // viavel, inviavel, analisar
+  
+  // Conversão
+  clienteConvertidoId String?
+  convertidoEm      DateTime?
+  
+  // Follow-up
+  proximoContato    DateTime?
+  observacoes       String?
+  
+  ativo             Boolean   @default(true)
+  criadoEm          DateTime  @default(now())
+  atualizadoEm      DateTime  @updatedAt
+
+  // Relacionamentos
+  atendimentos      Atendimento[]
+  propostas         PropostaComercial[]
+  tarefas           TarefaLead[]
+
+  @@map("leads")
+}
+
+model Atendimento {
+  id          String    @id @default(uuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  leadId      String
+  lead        Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  
+  tipo        String    // telefone, video, presencial, email, whatsapp
+  data        DateTime
+  duracaoMin  Int?
+  
+  // Participantes
+  atendenteId String
+  atendente   Usuario   @relation(fields: [atendenteId], references: [id])
+  
+  // Conteúdo
+  assunto     String
+  descricao   String
+  proximosPassos String?
+  
+  // Follow-up
+  agendarRetorno DateTime?
+  
+  criadoEm    DateTime  @default(now())
+
+  @@map("atendimentos")
+}
+
+model PropostaComercial {
+  id              String    @id @default(uuid())
+  tenantId        String
+  tenant          Tenant    @relation(fields: [tenantId], references: [id])
+  leadId          String
+  lead            Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  
+  // Identificação
+  numero          String    @unique
+  versao          Int       @default(1)
+  
+  // Conteúdo
+  titulo          String
+  descricao       String?
+  servicos        Json      // array de serviços incluídos
+  honorarios      Json      // configuração de honorários
+  
+  // Valores
+  valorTotal      Decimal   @db.Decimal(15, 2)
+  valorEntrada    Decimal?  @db.Decimal(15, 2)
+  parcelas        Int       @default(1)
+  valorParcela    Decimal?  @db.Decimal(15, 2)
+  
+  // Status
+  status          String    @default("rascunho") // rascunho, enviada, visualizada, aceita, recusada, expirada
+  dataEnvio       DateTime?
+  dataAceite      DateTime?
+  dataExpiracao   DateTime?
+  
+  // Aceite digital
+  tokenAceite     String?   @unique
+  ipAceite        String?
+  documentoAceite String?   // URL do contrato assinado
+  
+  // Responsável
+  elaboradoPorId  String
+  elaboradoPor    Usuario   @relation(fields: [elaboradoPorId], references: [id])
+  
+  observacoes     String?
+  criadoEm        DateTime  @default(now())
+  atualizadoEm    DateTime  @updatedAt
+
+  @@map("propostas_comerciais")
+}
+
+model TarefaLead {
+  id          String    @id @default(uuid())
+  leadId      String
+  lead        Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  
+  titulo      String
+  descricao   String?
+  tipo        String    // ligar, enviar_email, enviar_proposta, reuniao, etc
+  
+  // Agendamento
+  dataVencimento DateTime
+  horaVencimento String?
+  
+  // Responsável
+  responsavelId String
+  
+  // Status
+  status      String    @default("pendente") // pendente, em_andamento, concluida, cancelada
+  concluidaEm DateTime?
+  
+  // Lembrete
+  lembreteEnviado Boolean @default(false)
+  
+  criadoEm    DateTime  @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@map("tarefas_lead")
 }
 
 // ==================== AUDIT LOG ====================
