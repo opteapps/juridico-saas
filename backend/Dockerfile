@@ -15,7 +15,12 @@ RUN npx prisma generate
 # Copia o restante do código
 COPY . .
 
+# Create entrypoint script
+RUN echo '#!/bin/sh' > /entrypoint.sh && \
+    echo 'npx prisma db push --accept-data-loss' >> /entrypoint.sh && \
+    echo 'exec node src/server.js' >> /entrypoint.sh && \
+    chmod +x /entrypoint.sh
+
 EXPOSE 3001
 
-# Aplica migrações e inicia o servidor
-CMD ["sh", "-c", "npx prisma db push --accept-data-loss 2>&1 && echo '=== STARTING SERVER ===' && node src/server.js 2>&1"]
+ENTRYPOINT ["/entrypoint.sh"]
