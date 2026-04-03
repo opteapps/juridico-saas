@@ -14,5 +14,5 @@ COPY . .
 
 EXPOSE 3001
 
-# Aplica migrações e inicia o servidor
-CMD ["sh", "-c", "npx prisma db push --accept-data-loss && node src/server.js"]
+# Aplica schema no banco e inicia o servidor
+CMD ["sh", "-c", "npx prisma db push --accept-data-loss --skip-generate && node src/server.js"]

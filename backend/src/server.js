@@ -130,7 +130,13 @@ const start = async () => {
     await prisma.$connect()
     app.log.info('Banco de dados conectado')
 
-    await seedSeNecessario()
+    const port = Number(process.env.PORT) || 3001
+    await app.listen({ port, host: '0.0.0.0' })
+    app.log.info(`Servidor rodando na porta ${port}`)
+    app.log.info(`Documentação API: http://localhost:${port}/docs`)
+
+    // Seed e jobs rodam após o servidor estar online (não bloqueiam o healthcheck)
+    seedSeNecessario().catch(err => app.log.warn('Seed falhou:', err.message))
 
     try {
       await startJobs()
@@ -138,11 +144,6 @@ const start = async () => {
     } catch (err) {
       app.log.warn('Jobs não iniciados (Redis indisponível):', err.message)
     }
-
-    const port = Number(process.env.PORT) || 3001
-    await app.listen({ port, host: '0.0.0.0' })
-    app.log.info(`Servidor rodando na porta ${port}`)
-    app.log.info(`Documentação API: http://localhost:${port}/docs`)
   } catch (err) {
     app.log.error(err)
     process.exit(1)
