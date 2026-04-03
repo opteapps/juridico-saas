@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { prisma } from '../../database/prisma.js'
+import { legalAI } from '../../services/legalAI.js'
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '')
 
@@ -19,18 +20,10 @@ export const iaController = {
     }
     
     try {
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
-      
-      const prompt = contexto
-        ? `${SYSTEM_PROMPT}\n\nContexto do processo: ${JSON.stringify(contexto)}\n\nPergunta: ${mensagem}`
-        : `${SYSTEM_PROMPT}\n\nPergunta: ${mensagem}`
-      
-      const result = await model.generateContent(prompt)
-      const resposta = result.response.text()
-      
+      const resposta = await legalAI.chat(mensagem, contexto)
       return { resposta: resposta + AVISO_IA }
     } catch (err) {
-      console.error('Gemini error:', err)
+      console.error('IA error:', err)
       return reply.status(500).send({ error: 'Erro ao processar com IA' })
     }
   },
@@ -54,28 +47,8 @@ export const iaController = {
     }
     
     try {
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
-      
-      const prompt = `${SYSTEM_PROMPT}
-      
-      Resuma o seguinte processo jurídico de forma objetiva:
-      
-      Número: ${processo.numero}
-      Área: ${processo.area || 'Não informada'}
-      Tribunal: ${processo.tribunal || 'Não informado'}
-      Vara: ${processo.vara || 'Não informada'}
-      Juiz: ${processo.juiz || 'Não informado'}
-      Status: ${processo.status}
-      Assunto: ${processo.assunto || 'Não informado'}
-      Clientes: ${processo.clientes.map(c => c.cliente.nome).join(', ')}
-      
-      Últimas movimentações:
-      ${processo.movimentacoes.map(m => `- ${new Date(m.data).toLocaleDateString('pt-BR')}: ${m.descricao}`).join('\n')}
-      
-      Forneça um resumo executivo do processo.`
-      
-      const result = await model.generateContent(prompt)
-      return { resumo: result.response.text() + AVISO_IA }
+      const resumo = await legalAI.resumirProcesso(processo, processo.movimentacoes)
+      return { resumo: resumo + AVISO_IA }
     } catch (err) {
       return { resumo: 'Erro ao gerar resumo com IA' }
     }
@@ -102,7 +75,7 @@ export const iaController = {
       }`
       
       const result = await model.generateContent(prompt)
-      const texto = result.response.text().replace(/\`\`\`json\n?|\n?\`\`\`/g, '').trim()
+      const texto = result.response.text().replace(/```json\n?|\n?```/g, '').trim()
       return JSON.parse(texto)
     } catch {
       return { tipo: 'outros', urgencia: 'normal', temPrazo: false, diasPrazo: null }
@@ -131,10 +104,139 @@ export const iaController = {
       }`
       
       const result = await model.generateContent(prompt)
-      const texto = result.response.text().replace(/\`\`\`json\n?|\n?\`\`\`/g, '').trim()
+      const texto = result.response.text().replace(/```json\n?|\n?```/g, '').trim()
       return JSON.parse(texto)
     } catch {
       return { prazos: [] }
+    }
+  },
+
+  /**
+   * Explicar decisão judicial
+   */
+  async explicarDecisao(request, reply) {
+    const { textoDecisao, processoId } = request.body
+    const { tenantId } = request.usuario
+
+    if (!process.env.GEMINI_API_KEY) {
+      return reply.status(503).send({ error: 'Serviço de IA não configurado' })
+    }
+
+    try {
+      let contexto = ''
+      if (processoId) {
+        const processo = await prisma.processo.findFirst({
+          where: { id: processoId, tenantId },
+        })
+        if (processo) {
+          contexto = `Processo ${processo.numero}, ${processo.assunto}`
+        }
+      }
+
+      const explicacao = await legalAI.explicarDecisao(textoDecisao, contexto)
+      return { explicacao: explicacao + AVISO_IA }
+    } catch (err) {
+      console.error('Erro ao explicar decisão:', err)
+      return reply.status(500).send({ error: 'Erro ao analisar decisão' })
+    }
+  },
+
+  /**
+   * Sugerir estratégia jurídica
+   */
+  async sugerirEstrategia(request, reply) {
+    const { processoId, objetivo } = request.body
+    const { tenantId } = request.usuario
+
+    if (!process.env.GEMINI_API_KEY) {
+      return reply.status(503).send({ error: 'Serviço de IA não configurado' })
+    }
+
+    try {
+      const processo = await prisma.processo.findFirst({
+        where: { id: processoId, tenantId },
+        include: {
+          movimentacoes: { orderBy: { data: 'desc' }, take: 10 },
+        },
+      })
+
+      if (!processo) {
+        return reply.status(404).send({ error: 'Processo não encontrado' })
+      }
+
+      const historico = processo.movimentacoes.map(m => m.descricao)
+      const estrategia = await legalAI.sugerirEstrategia(processo, historico, objetivo)
+
+      return { estrategia: estrategia + AVISO_IA }
+    } catch (err) {
+      console.error('Erro ao sugerir estratégia:', err)
+      return reply.status(500).send({ error: 'Erro ao gerar sugestões' })
+    }
+  },
+
+  /**
+   * Gerar rascunho de petição
+   */
+  async gerarPeticao(request, reply) {
+    const { tipoPeticao, processoId, argumentos } = request.body
+    const { tenantId } = request.usuario
+
+    if (!process.env.GEMINI_API_KEY) {
+      return reply.status(503).send({ error: 'Serviço de IA não configurado' })
+    }
+
+    try {
+      const processo = await prisma.processo.findFirst({
+        where: { id: processoId, tenantId },
+        include: {
+          clientes: { include: { cliente: true } },
+        },
+      })
+
+      if (!processo) {
+        return reply.status(404).send({ error: 'Processo não encontrado' })
+      }
+
+      const dadosProcesso = {
+        numero: processo.numero,
+        vara: processo.vara,
+        tribunal: processo.tribunal,
+        clientes: processo.clientes.map(c => c.cliente.nome),
+      }
+
+      const peticao = await legalAI.gerarPeticao(tipoPeticao, dadosProcesso, argumentos)
+      return { peticao: peticao + AVISO_IA }
+    } catch (err) {
+      console.error('Erro ao gerar petição:', err)
+      return reply.status(500).send({ error: 'Erro ao gerar rascunho' })
+    }
+  },
+
+  /**
+   * Analisar documento PDF
+   */
+  async analisarDocumento(request, reply) {
+    const { documentoId } = request.body
+    const { tenantId } = request.usuario
+
+    try {
+      const documento = await prisma.documento.findFirst({
+        where: { id: documentoId, tenantId },
+      })
+
+      if (!documento) {
+        return reply.status(404).send({ error: 'Documento não encontrado' })
+      }
+
+      // Aqui integraria com o documentParser
+      // Por enquanto retorna estrutura
+      return {
+        sucesso: true,
+        mensagem: 'Análise de documento disponível via upload direto',
+      }
+    } catch (err) {
+      console.error('Erro ao analisar documento:', err)
+      return reply.status(500).send({ error: 'Erro ao analisar documento' })
     }
   },
 }

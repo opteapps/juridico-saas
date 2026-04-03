@@ -22,8 +22,10 @@ import { notificacaoRoutes } from './modules/notificacoes/routes.js'
 import { iaRoutes } from './modules/ia/routes.js'
 import { juriRoutes } from './modules/jurimetria/routes.js'
 import { superAdminRoutes } from './modules/superadmin/routes.js'
+import { tribunaisRoutes } from './modules/tribunais/routes.js'
 import { wsHandler } from './modules/notificacoes/websocket.js'
 import { startJobs } from './jobs/index.js'
+import { cronJobs } from './jobs/cronJobs.js'
 import { errorHandler } from './middlewares/errorHandler.js'
 
 const app = Fastify({
@@ -87,6 +89,7 @@ await app.register(notificacaoRoutes, { prefix: `${apiPrefix}/notificacoes` })
 await app.register(iaRoutes, { prefix: `${apiPrefix}/ia` })
 await app.register(juriRoutes, { prefix: `${apiPrefix}/jurimetria` })
 await app.register(superAdminRoutes, { prefix: `${apiPrefix}/super-admin` })
+await app.register(tribunaisRoutes, { prefix: `${apiPrefix}/tribunais` })
 
 // Health check
 app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString(), version: '2.0.0' }))
@@ -137,6 +140,14 @@ const start = async () => {
 
     // Seed e jobs rodam após o servidor estar online (não bloqueiam o healthcheck)
     seedSeNecessario().catch(err => app.log.warn('Seed falhou:', err.message))
+
+    // Inicia cron jobs
+    try {
+      cronJobs.iniciar()
+      app.log.info('Cron jobs iniciados')
+    } catch (err) {
+      app.log.warn('Cron jobs não iniciados:', err.message)
+    }
 
     try {
       await startJobs()

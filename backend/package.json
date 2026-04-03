@@ -29,7 +29,9 @@
     "fastify": "^4.29.0",
     "ioredis": "^5.4.2",
     "minio": "^8.0.2",
+    "node-cron": "^3.0.3",
     "nodemailer": "^6.9.16",
+    "pdf-parse": "^1.1.1",
     "uuid": "^11.0.5",
     "zod": "^3.24.1"
   },
