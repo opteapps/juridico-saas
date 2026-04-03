@@ -1,6 +1,9 @@
 FROM node:20-alpine
 WORKDIR /app
 
+# Instala OpenSSL (necessário para Prisma)
+RUN apk add --no-cache openssl
+
 # Instala dependências (cache otimizado)
 COPY package*.json ./
 COPY prisma ./prisma/
@@ -14,5 +17,5 @@ COPY . .
 
 EXPOSE 3001
 
-# Aplica schema no banco e inicia o servidor
-CMD ["sh", "-c", "npx prisma db push --accept-data-loss --skip-generate && node src/server.js"]
+# Inicia o servidor
+CMD ["node", "src/server.js"]
