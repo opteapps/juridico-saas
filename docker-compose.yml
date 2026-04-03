@@ -1,0 +1,92 @@
+version: '3.9'
+
+# =====================================================
+# docker-compose.yml — Ambiente Local com PostgreSQL
+# Use: docker-compose up -d
+# =====================================================
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: juridico_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: juridico_saas
+      POSTGRES_USER: juridico_user
+      POSTGRES_PASSWORD: juridico_pass_2024
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U juridico_user -d juridico_saas"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: juridico_redis
+    restart: unless-stopped
+    command: redis-server --requirepass redis_pass_2024
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  minio:
+    image: minio/minio:latest
+    container_name: juridico_minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minio_admin
+      MINIO_ROOT_PASSWORD: minio_pass_2024
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: juridico_backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://juridico_user:juridico_pass_2024@postgres:5432/juridico_saas
+      REDIS_URL: redis://:redis_pass_2024@redis:6379
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: "9000"
+      MINIO_ACCESS_KEY: minio_admin
+      MINIO_SECRET_KEY: minio_pass_2024
+      FRONTEND_URL: http://localhost:3000
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: http://localhost:3001/api/v1
+    container_name: juridico_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:

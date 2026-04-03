@@ -1,0 +1,429 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== MULTI-TENANT ====================
+
+model Plano {
+  id                String       @id @default(uuid())
+  nome              String
+  descricao         String?
+  preco             Decimal      @db.Decimal(10, 2)
+  maxUsuarios       Int
+  maxProcessos      Int
+  maxStorageMb      Int
+  temIA             Boolean      @default(false)
+  temMonitoramento  Boolean      @default(false)
+  temPortalCliente  Boolean      @default(false)
+  ativo             Boolean      @default(true)
+  criadoEm         DateTime     @default(now())
+  tenants           Tenant[]
+  assinaturas       Assinatura[]
+
+  @@map("planos")
+}
+
+model Tenant {
+  id             String       @id @default(uuid())
+  nome           String
+  cnpj           String?      @unique
+  email          String       @unique
+  telefone       String?
+  endereco       String?
+  logoUrl        String?
+  planoId        String
+  plano          Plano        @relation(fields: [planoId], references: [id])
+  ativo          Boolean      @default(true)
+  criadoEm     DateTime     @default(now())
+  atualizadoEm DateTime     @updatedAt
+
+  usuarios       Usuario[]
+  clientes       Cliente[]
+  processos      Processo[]
+  documentos     Documento[]
+  agendaEventos  AgendaEvento[]
+  diligencias    Diligencia[]
+  lancamentos    Lancamento[]
+  notificacoes   Notificacao[]
+  assinaturas    Assinatura[]
+  auditLogs      AuditLog[]
+
+  @@map("tenants")
+}
+
+model Assinatura {
+  id          String    @id @default(uuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  planoId     String
+  plano       Plano     @relation(fields: [planoId], references: [id])
+  status      String    @default("ativa")
+  inicioEm    DateTime  @default(now())
+  fimEm       DateTime?
+  criadoEm   DateTime  @default(now())
+
+  @@map("assinaturas")
+}
+
+// ==================== USUARIOS ====================
+
+model Usuario {
+  id                  String    @id @default(uuid())
+  tenantId            String?
+  tenant              Tenant?   @relation(fields: [tenantId], references: [id])
+  nome                String
+  email               String
+  senha               String
+  role                String    @default("advogado")
+  oab                 String?
+  telefone            String?
+  avatarUrl           String?
+  areasAtuacao        String[]
+  ativo               Boolean   @default(true)
+  emailVerificado     Boolean   @default(false)
+  webauthnCredentials Json?
+  criadoEm          DateTime  @default(now())
+  atualizadoEm      DateTime  @updatedAt
+
+  sessoes        Sessao[]
+  agendaEventos  AgendaEvento[]
+  processosAdv   AdvogadoProcesso[]
+  diligencias    Diligencia[]
+  documentosEnv  Documento[]
+  lancamentos    Lancamento[]
+  auditLogs      AuditLog[]
+  notificacoes   Notificacao[]
+  mensagens      Mensagem[]
+
+  @@unique([email, tenantId])
+  @@map("usuarios")
+}
+
+model Sessao {
+  id           String   @id @default(uuid())
+  usuarioId    String
+  usuario      Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  refreshToken String   @unique
+  expiresAt    DateTime
+  criadoEm    DateTime @default(now())
+
+  @@map("sessoes")
+}
+
+// ==================== CLIENTES ====================
+
+model Cliente {
+  id              String    @id @default(uuid())
+  tenantId        String
+  tenant          Tenant    @relation(fields: [tenantId], references: [id])
+  tipo            String    @default("pessoa_fisica")
+  nome            String
+  cpfCnpj         String?
+  email           String?
+  telefone        String?
+  celular         String?
+  endereco        String?
+  cidade          String?
+  estado          String?
+  cep             String?
+  dataNascimento  DateTime?
+  profissao       String?
+  observacoes     String?
+  areas           String[]
+  tags            String[]
+  ativo           Boolean   @default(true)
+  usuarioPortalId String?   @unique
+  criadoEm      DateTime  @default(now())
+  atualizadoEm  DateTime  @updatedAt
+
+  processos      ClienteProcesso[]
+  documentos     Documento[]
+  lancamentos    Lancamento[]
+  mensagens      Mensagem[]
+
+  @@unique([cpfCnpj, tenantId])
+  @@map("clientes")
+}
+
+// ==================== PROCESSOS ====================
+
+model Processo {
+  id                 String    @id @default(uuid())
+  tenantId           String
+  tenant             Tenant    @relation(fields: [tenantId], references: [id])
+  numero             String
+  numeroFormatado    String?
+  tribunal           String?
+  vara               String?
+  forum              String?
+  juiz               String?
+  area               String?
+  assunto            String?
+  valorCausa         Decimal?  @db.Decimal(15, 2)
+  status             String    @default("ativo")
+  resultado          String?
+  dataDistribuicao   DateTime?
+  dataEncerramento   DateTime?
+  descricao          String?
+  observacoes        String?
+  dadosAdicionais    Json?
+  ultimaConsulta     DateTime?
+  monitoramentoAtivo Boolean   @default(true)
+  criadoEm         DateTime  @default(now())
+  atualizadoEm     DateTime  @updatedAt
+
+  clientes       ClienteProcesso[]
+  advogados      AdvogadoProcesso[]
+  movimentacoes  Movimentacao[]
+  documentos     Documento[]
+  prazos         Prazo[]
+  diligencias    Diligencia[]
+  lancamentos    Lancamento[]
+  mensagens      Mensagem[]
+
+  @@unique([numero, tenantId])
+  @@map("processos")
+}
+
+model ClienteProcesso {
+  id         String   @id @default(uuid())
+  clienteId  String
+  cliente    Cliente  @relation(fields: [clienteId], references: [id])
+  processoId String
+  processo   Processo @relation(fields: [processoId], references: [id])
+  polo       String   @default("ativo")
+  criadoEm DateTime @default(now())
+
+  @@unique([clienteId, processoId])
+  @@map("clientes_processos")
+}
+
+model AdvogadoProcesso {
+  id         String   @id @default(uuid())
+  usuarioId  String
+  usuario    Usuario  @relation(fields: [usuarioId], references: [id])
+  processoId String
+  processo   Processo @relation(fields: [processoId], references: [id])
+  principal  Boolean  @default(false)
+  criadoEm DateTime @default(now())
+
+  @@unique([usuarioId, processoId])
+  @@map("advogados_processos")
+}
+
+// ==================== MOVIMENTAÇÕES ====================
+
+model Movimentacao {
+  id             String   @id @default(uuid())
+  processoId     String
+  processo       Processo @relation(fields: [processoId], references: [id])
+  data           DateTime
+  tipo           String?
+  descricao      String
+  urgencia       String   @default("normal")
+  origem         String   @default("manual")
+  dadosOriginais Json?
+  lida           Boolean  @default(false)
+  criadoEm     DateTime @default(now())
+
+  prazos       Prazo[]
+  alertas      Alerta[]
+
+  @@map("movimentacoes")
+}
+
+model Prazo {
+  id             String        @id @default(uuid())
+  processoId     String
+  processo       Processo      @relation(fields: [processoId], references: [id])
+  movimentacaoId String?
+  movimentacao   Movimentacao? @relation(fields: [movimentacaoId], references: [id])
+  titulo         String
+  descricao      String?
+  dataVencimento DateTime
+  tipo           String        @default("processual")
+  status         String        @default("pendente")
+  responsavelId  String?
+  criadoEm     DateTime      @default(now())
+  atualizadoEm DateTime      @updatedAt
+
+  alertas        Alerta[]
+
+  @@map("prazos")
+}
+
+model Alerta {
+  id             String        @id @default(uuid())
+  processoId     String?
+  prazoPid       String?
+  prazo          Prazo?        @relation(fields: [prazoPid], references: [id])
+  movimentacaoId String?
+  movimentacao   Movimentacao? @relation(fields: [movimentacaoId], references: [id])
+  tipo           String
+  mensagem       String
+  urgencia       String        @default("normal")
+  lido           Boolean       @default(false)
+  criadoEm     DateTime      @default(now())
+
+  @@map("alertas")
+}
+
+// ==================== AGENDA ====================
+
+model AgendaEvento {
+  id           String    @id @default(uuid())
+  tenantId     String
+  tenant       Tenant    @relation(fields: [tenantId], references: [id])
+  usuarioId    String
+  usuario      Usuario   @relation(fields: [usuarioId], references: [id])
+  processoId   String?
+  titulo       String
+  descricao    String?
+  tipo         String    @default("compromisso")
+  inicio       DateTime
+  fim          DateTime?
+  diaInteiro   Boolean   @default(false)
+  local        String?
+  status       String    @default("agendado")
+  lembretes    Json?
+  googleCalId  String?
+  criadoEm   DateTime  @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@map("agenda_eventos")
+}
+
+// ==================== DOCUMENTOS ====================
+
+model Documento {
+  id             String    @id @default(uuid())
+  tenantId       String
+  tenant         Tenant    @relation(fields: [tenantId], references: [id])
+  processoId     String?
+  processo       Processo? @relation(fields: [processoId], references: [id])
+  clienteId      String?
+  cliente        Cliente?  @relation(fields: [clienteId], references: [id])
+  usuarioId      String
+  usuario        Usuario   @relation(fields: [usuarioId], references: [id])
+  nome           String
+  tipo           String?
+  mimetype       String
+  tamanhoBytes   Int
+  storageKey     String    @unique
+  versao         Int       @default(1)
+  documentoPaiId String?
+  publico        Boolean   @default(false)
+  descricao      String?
+  criadoEm     DateTime  @default(now())
+
+  versoes      Documento[] @relation("Versoes")
+  documentoPai Documento?  @relation("Versoes", fields: [documentoPaiId], references: [id])
+
+  @@map("documentos")
+}
+
+// ==================== FINANCEIRO ====================
+
+model Lancamento {
+  id             String    @id @default(uuid())
+  tenantId       String
+  tenant         Tenant    @relation(fields: [tenantId], references: [id])
+  processoId     String?
+  processo       Processo? @relation(fields: [processoId], references: [id])
+  clienteId      String?
+  cliente        Cliente?  @relation(fields: [clienteId], references: [id])
+  usuarioId      String?
+  usuario        Usuario?  @relation(fields: [usuarioId], references: [id])
+  tipo           String
+  categoria      String
+  descricao      String
+  valor          Decimal   @db.Decimal(15, 2)
+  dataVencimento DateTime?
+  dataPagamento  DateTime?
+  status         String    @default("pendente")
+  formaPagamento String?
+  comprovante    String?
+  observacoes    String?
+  criadoEm    DateTime  @default(now())
+  atualizadoEm DateTime  @updatedAt
+
+  @@map("lancamentos")
+}
+
+// ==================== DILIGÊNCIAS ====================
+
+model Diligencia {
+  id            String    @id @default(uuid())
+  tenantId      String
+  tenant        Tenant    @relation(fields: [tenantId], references: [id])
+  processoId    String?
+  processo      Processo? @relation(fields: [processoId], references: [id])
+  responsavelId String
+  responsavel   Usuario   @relation(fields: [responsavelId], references: [id])
+  titulo        String
+  descricao     String?
+  local         String?
+  data          DateTime?
+  status        String    @default("pendente")
+  resultado     String?
+  criadoEm    DateTime  @default(now())
+  atualizadoEm DateTime  @updatedAt
+
+  @@map("diligencias")
+}
+
+// ==================== NOTIFICAÇÕES ====================
+
+model Notificacao {
+  id         String   @id @default(uuid())
+  tenantId   String
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+  usuarioId  String
+  usuario    Usuario  @relation(fields: [usuarioId], references: [id])
+  tipo       String
+  titulo     String
+  mensagem   String
+  link       String?
+  lida       Boolean  @default(false)
+  criadoEm DateTime @default(now())
+
+  @@map("notificacoes")
+}
+
+model Mensagem {
+  id          String    @id @default(uuid())
+  processoId  String?
+  processo    Processo? @relation(fields: [processoId], references: [id])
+  remetenteId String
+  remetente   Usuario   @relation(fields: [remetenteId], references: [id])
+  clienteId   String?
+  cliente     Cliente?  @relation(fields: [clienteId], references: [id])
+  conteudo    String
+  lida        Boolean   @default(false)
+  criadoEm  DateTime  @default(now())
+
+  @@map("mensagens")
+}
+
+// ==================== AUDIT LOG ====================
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  tenantId   String?
+  tenant     Tenant?  @relation(fields: [tenantId], references: [id])
+  usuarioId  String?
+  usuario    Usuario? @relation(fields: [usuarioId], references: [id])
+  acao       String
+  entidade   String
+  entidadeId String?
+  dados      Json?
+  ip         String?
+  criadoEm DateTime @default(now())
+
+  @@map("audit_logs")
+}

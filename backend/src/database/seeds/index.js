@@ -1,0 +1,117 @@
+import { PrismaClient } from '@prisma/client'
+import bcrypt from 'bcryptjs'
+
+const prisma = new PrismaClient()
+
+async function main() {
+  console.log('Seeding database...')
+
+  // Create plans
+  const planos = await Promise.all([
+    prisma.plano.upsert({
+      where: { id: '00000000-0000-0000-0000-000000000001' },
+      update: {},
+      create: {
+        id: '00000000-0000-0000-0000-000000000001',
+        nome: 'Starter',
+        descricao: 'Para advogados solo e pequenos escritórios',
+        preco: 99.00,
+        maxUsuarios: 3,
+        maxProcessos: 100,
+        maxStorageMb: 2048,
+        temIA: false,
+        temMonitoramento: true,
+        temPortalCliente: false,
+      },
+    }),
+    prisma.plano.upsert({
+      where: { id: '00000000-0000-0000-0000-000000000002' },
+      update: {},
+      create: {
+        id: '00000000-0000-0000-0000-000000000002',
+        nome: 'Profissional',
+        descricao: 'Para escritórios em crescimento',
+        preco: 299.00,
+        maxUsuarios: 15,
+        maxProcessos: 1000,
+        maxStorageMb: 20480,
+        temIA: true,
+        temMonitoramento: true,
+        temPortalCliente: true,
+      },
+    }),
+    prisma.plano.upsert({
+      where: { id: '00000000-0000-0000-0000-000000000003' },
+      update: {},
+      create: {
+        id: '00000000-0000-0000-0000-000000000003',
+        nome: 'Enterprise',
+        descricao: 'Para grandes escritórios',
+        preco: 799.00,
+        maxUsuarios: 999,
+        maxProcessos: 999999,
+        maxStorageMb: 512000,
+        temIA: true,
+        temMonitoramento: true,
+        temPortalCliente: true,
+      },
+    }),
+  ])
+
+  console.log('Plans created:', planos.map(p => p.nome))
+
+  // Create super admin
+  const senhaHash = await bcrypt.hash('Admin@123', 12)
+  const superAdmin = await prisma.usuario.upsert({
+    where: { id: '00000000-0000-0000-0000-000000000099' },
+    update: {},
+    create: {
+      id: '00000000-0000-0000-0000-000000000099',
+      nome: 'Super Administrador',
+      email: 'admin@juridicosaas.com.br',
+      senha: senhaHash,
+      role: 'super_admin',
+      tenantId: null,
+    },
+  })
+
+  console.log('Super admin created:', superAdmin.email)
+
+  // Create demo tenant
+  const demoTenant = await prisma.tenant.upsert({
+    where: { id: '00000000-0000-0000-0000-000000000010' },
+    update: {},
+    create: {
+      id: '00000000-0000-0000-0000-000000000010',
+      nome: 'Escritório Demo',
+      email: 'demo@escritoriodemo.com.br',
+      planoId: '00000000-0000-0000-0000-000000000002',
+    },
+  })
+
+  const demoAdmin = await prisma.usuario.upsert({
+    where: { id: '00000000-0000-0000-0000-000000000011' },
+    update: {},
+    create: {
+      id: '00000000-0000-0000-0000-000000000011',
+      tenantId: demoTenant.id,
+      nome: 'Dr. João Silva',
+      email: 'joao@escritoriodemo.com.br',
+      senha: senhaHash,
+      role: 'admin_escritorio',
+      oab: 'OAB/SP 123456',
+      areasAtuacao: JSON.stringify(['Cível', 'Trabalhista']),
+    },
+  })
+
+  console.log('Demo tenant created:', demoTenant.nome)
+  console.log('Demo admin created:', demoAdmin.email)
+  console.log('\nCredentials:')
+  console.log('Super Admin: admin@juridicosaas.com.br / Admin@123')
+  console.log('Demo Admin: joao@escritoriodemo.com.br / Admin@123')
+  console.log('\nSeeding complete!')
+}
+
+main()
+  .catch(console.error)
+  .finally(() => prisma.$disconnect())
