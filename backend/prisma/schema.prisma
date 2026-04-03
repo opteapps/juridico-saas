@@ -76,6 +76,9 @@ model Tenant {
   modelosContrato ModeloContrato[]
   modelosTarefa  ModeloTarefa[]
   configuracoes  ConfiguracaoEscritorio[]
+  documentosInternos DocumentoInterno[]
+  metasUsuarios  MetaUsuario[]
+  produtividade  Produtividade[]
 
   @@map("tenants")
 }
@@ -266,15 +269,69 @@ model Usuario {
   id                  String    @id @default(uuid())
   tenantId            String?
   tenant              Tenant?   @relation(fields: [tenantId], references: [id])
+  
+  // Dados pessoais
   nome                String
   email               String
   senha               String
+  cpf                 String?
+  rg                  String?
+  dataNascimento      DateTime?
+  
+  // Perfil profissional
   role                String    @default("advogado")
+  cargo               String?
+  departamento        String?
+  
+  // OAB (para advogados)
   oab                 String?
+  oabUf               String?
+  oabDataInscricao    DateTime?
+  
+  // Contato
   telefone            String?
+  celular             String?
+  emailAlternativo    String?
+  
+  // Endereço
+  endereco            String?
+  cidade              String?
+  estado              String?
+  cep                 String?
+  
+  // Avatar e documentos
   avatarUrl           String?
+  
+  // Áreas e especialidades
   areasAtuacao        String[]
+  especialidades      String[]
+  
+  // Unidade e alocação
+  unidadeId           String?
+  unidade             Unidade?  @relation(fields: [unidadeId], references: [id])
+  equipeId            String?
+  equipe              Equipe?   @relation(fields: [equipeId], references: [id])
+  
+  // Hierarquia
+  supervisorId        String?
+  supervisor          Usuario?  @relation("Supervisao", fields: [supervisorId], references: [id])
+  subordinados        Usuario[] @relation("Supervisao")
+  
+  // Metas e produtividade
+  metaProcessosMes    Int?
+  metaHorasDia        Decimal?  @db.Decimal(4, 2)
+  metaFaturamentoMes  Decimal?  @db.Decimal(15, 2)
+  
+  // Comissão
+  percentualComissao  Decimal?  @db.Decimal(5, 2)
+  tipoComissao        String?   @default("receita_liquida") // receita_liquida, receita_bruta, fixo
+  
+  // Status
   ativo               Boolean   @default(true)
+  dataAdmissao        DateTime?
+  dataDemissao        DateTime?
+  
+  // Verificações
   emailVerificado     Boolean   @default(false)
   telefoneVerificado  Boolean   @default(false)
   
@@ -289,34 +346,32 @@ model Usuario {
   ultimoLogin         DateTime?
   ultimoIp            String?
   tentativasFalhas    Int       @default(0)
-  bloqueadoAte      DateTime?
+  bloqueadoAte        DateTime?
   
-  // Hierarquia
-  cargo               String?
-  supervisorId        String?
-  supervisor          Usuario?  @relation("Supervisao", fields: [supervisorId], references: [id])
-  subordinados        Usuario[] @relation("Supervisao")
-  
-  // Unidade (para escritórios multi-unidade)
-  unidadeId           String?
-  unidade             Unidade?  @relation(fields: [unidadeId], references: [id])
-  
-  // Permissões customizadas (override do role)
+  // Permissões customizadas
   permissoes          Json?
   
-  criadoEm          DateTime  @default(now())
-  atualizadoEm      DateTime  @updatedAt
+  // Observações gerenciais
+  observacoes         String?
+  
+  criadoEm            DateTime  @default(now())
+  atualizadoEm        DateTime  @updatedAt
 
-  sessoes        Sessao[]
-  dispositivos   Dispositivo[]
-  agendaEventos  AgendaEvento[]
-  processosAdv   AdvogadoProcesso[]
-  diligencias    Diligencia[]
-  documentosEnv  Documento[]
-  lancamentos    Lancamento[]
-  auditLogs      AuditLog[]
-  notificacoes   Notificacao[]
-  mensagens      Mensagem[]
+  // Relacionamentos
+  sessoes             Sessao[]
+  dispositivos        Dispositivo[]
+  agendaEventos       AgendaEvento[]
+  processosAdv        AdvogadoProcesso[]
+  diligencias         Diligencia[]
+  documentosEnv       Documento[]
+  lancamentos         Lancamento[]
+  auditLogs           AuditLog[]
+  notificacoes        Notificacao[]
+  mensagens           Mensagem[]
+  documentosInternos  DocumentoInterno[]
+  historicoProfissional HistoricoProfissional[]
+  metas               MetaUsuario[]
+  produtividade       Produtividade[]
 
   @@unique([email, tenantId])
   @@map("usuarios")
@@ -644,9 +699,82 @@ model Mensagem {
   cliente     Cliente?  @relation(fields: [clienteId], references: [id])
   conteudo    String
   lida        Boolean   @default(false)
-  criadoEm  DateTime  @default(now())
+  criadoEm    DateTime  @default(now())
 
   @@map("mensagens")
+}
+
+// ==================== GESTÃO DE EQUIPE ====================
+
+model DocumentoInterno {
+  id          String    @id @default(uuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  usuarioId   String
+  usuario     Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  tipo        String    // contrato, certificado, diploma, avaliacao, etc
+  nome        String
+  descricao   String?
+  arquivoUrl  String
+  dataValidade DateTime?
+  ativo       Boolean   @default(true)
+  criadoEm    DateTime  @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@map("documentos_internos")
+}
+
+model HistoricoProfissional {
+  id          String    @id @default(uuid())
+  usuarioId   String
+  usuario     Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  tipo        String    // promocao, transferencia, treinamento, avaliacao, advertencia, suspensao
+  data        DateTime
+  descricao   String
+  dados       Json?     // dados adicionais específicos do tipo
+  registradoPorId String?
+  criadoEm    DateTime  @default(now())
+
+  @@map("historico_profissional")
+}
+
+model MetaUsuario {
+  id           String    @id @default(uuid())
+  tenantId     String
+  tenant       Tenant    @relation(fields: [tenantId], references: [id])
+  usuarioId    String
+  usuario      Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  periodo      String    // YYYY-MM
+  tipo         String    // processos, horas, faturamento, clientes
+  valorMeta    Decimal   @db.Decimal(15, 2)
+  valorRealizado Decimal? @db.Decimal(15, 2)
+  percentualAtingido Decimal? @db.Decimal(5, 2)
+  status       String    @default("pendente") // pendente, atingida, excedida, nao_atingida
+  observacoes  String?
+  criadoEm     DateTime  @default(now())
+  atualizadoEm DateTime  @updatedAt
+
+  @@unique([usuarioId, periodo, tipo])
+  @@map("metas_usuario")
+}
+
+model Produtividade {
+  id           String    @id @default(uuid())
+  tenantId     String
+  tenant       Tenant    @relation(fields: [tenantId], references: [id])
+  usuarioId    String
+  usuario      Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  data         DateTime
+  horasTrabalhadas Decimal? @db.Decimal(5, 2)
+  processosAtuados Int      @default(0)
+  tarefasConcluidas Int     @default(0)
+  clientesAtendidos Int     @default(0)
+  faturamentoGerado Decimal? @db.Decimal(15, 2)
+  observacoes  String?
+  criadoEm     DateTime  @default(now())
+
+  @@unique([usuarioId, data])
+  @@map("produtividade")
 }
 
 // ==================== AUDIT LOG ====================

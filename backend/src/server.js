@@ -24,6 +24,7 @@ import { juriRoutes } from './modules/jurimetria/routes.js'
 import { superAdminRoutes } from './modules/superadmin/routes.js'
 import { tribunaisRoutes } from './modules/tribunais/routes.js'
 import { escritorioRoutes } from './modules/escritorio/routes.js'
+import { equipeRoutes } from './modules/equipe/routes.js'
 import { wsHandler } from './modules/notificacoes/websocket.js'
 import { startJobs } from './jobs/index.js'
 import { cronJobs } from './jobs/cronJobs.js'
@@ -92,6 +93,7 @@ await app.register(juriRoutes, { prefix: `${apiPrefix}/jurimetria` })
 await app.register(superAdminRoutes, { prefix: `${apiPrefix}/super-admin` })
 await app.register(tribunaisRoutes, { prefix: `${apiPrefix}/tribunais` })
 await app.register(escritorioRoutes, { prefix: `${apiPrefix}/escritorio` })
+await app.register(equipeRoutes, { prefix: `${apiPrefix}/equipe` })
 
 // Health check
 app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString(), version: '2.0.0' }))
