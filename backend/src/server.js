@@ -89,7 +89,7 @@ await app.register(juriRoutes, { prefix: `${apiPrefix}/jurimetria` })
 await app.register(superAdminRoutes, { prefix: `${apiPrefix}/super-admin` })
 
 // Health check
-app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }))
+app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString(), version: '2.0.0' }))
 
 // Seed endpoint — protegido por secret, uso único
 app.post('/setup/seed', async (request, reply) => {
