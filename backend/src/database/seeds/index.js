@@ -3,10 +3,9 @@ import bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
 
-async function main() {
+export async function seedDatabase() {
   console.log('Seeding database...')
 
-  // Create plans
   const planos = await Promise.all([
     prisma.plano.upsert({
       where: { id: '00000000-0000-0000-0000-000000000001' },
@@ -60,8 +59,8 @@ async function main() {
 
   console.log('Plans created:', planos.map(p => p.nome))
 
-  // Create super admin
   const senhaHash = await bcrypt.hash('Admin@123', 12)
+
   const superAdmin = await prisma.usuario.upsert({
     where: { id: '00000000-0000-0000-0000-000000000099' },
     update: {},
@@ -77,7 +76,6 @@ async function main() {
 
   console.log('Super admin created:', superAdmin.email)
 
-  // Create demo tenant
   const demoTenant = await prisma.tenant.upsert({
     where: { id: '00000000-0000-0000-0000-000000000010' },
     update: {},
@@ -86,6 +84,17 @@ async function main() {
       nome: 'Escritório Demo',
       email: 'demo@escritoriodemo.com.br',
       planoId: '00000000-0000-0000-0000-000000000002',
+    },
+  })
+
+  await prisma.assinatura.upsert({
+    where: { id: '00000000-0000-0000-0000-000000000020' },
+    update: {},
+    create: {
+      id: '00000000-0000-0000-0000-000000000020',
+      tenantId: demoTenant.id,
+      planoId: '00000000-0000-0000-0000-000000000002',
+      status: 'ativa',
     },
   })
 
@@ -100,18 +109,17 @@ async function main() {
       senha: senhaHash,
       role: 'admin_escritorio',
       oab: 'OAB/SP 123456',
-      areasAtuacao: JSON.stringify(['Cível', 'Trabalhista']),
+      areasAtuacao: ['Cível', 'Trabalhista'],
     },
   })
 
-  console.log('Demo tenant created:', demoTenant.nome)
   console.log('Demo admin created:', demoAdmin.email)
-  console.log('\nCredentials:')
-  console.log('Super Admin: admin@juridicosaas.com.br / Admin@123')
-  console.log('Demo Admin: joao@escritoriodemo.com.br / Admin@123')
-  console.log('\nSeeding complete!')
+  console.log('Seeding complete!')
 }
 
-main()
-  .catch(console.error)
-  .finally(() => prisma.$disconnect())
+// Execução direta via: node src/database/seeds/index.js
+if (process.argv[1].includes('seeds/index')) {
+  seedDatabase()
+    .catch(console.error)
+    .finally(() => prisma.$disconnect())
+}

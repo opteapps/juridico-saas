@@ -94,11 +94,28 @@ app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOStrin
 // Error handler
 app.setErrorHandler(errorHandler)
 
+// Seed automático na primeira execução
+async function seedSeNecessario() {
+  try {
+    const totalPlanos = await prisma.plano.count()
+    if (totalPlanos === 0) {
+      app.log.info('Banco vazio — executando seed inicial...')
+      const { seedDatabase } = await import('./database/seeds/index.js')
+      await seedDatabase()
+      app.log.info('Seed concluído com sucesso')
+    }
+  } catch (err) {
+    app.log.warn('Seed automático falhou (pode já ter sido executado):', err.message)
+  }
+}
+
 // Start
 const start = async () => {
   try {
     await prisma.$connect()
     app.log.info('Banco de dados conectado')
+
+    await seedSeNecessario()
 
     try {
       await startJobs()
@@ -107,9 +124,10 @@ const start = async () => {
       app.log.warn('Jobs não iniciados (Redis indisponível):', err.message)
     }
 
-    await app.listen({ port: 3001, host: '0.0.0.0' })
-    app.log.info('Servidor rodando em http://localhost:3001')
-    app.log.info('Documentação API: http://localhost:3001/docs')
+    const port = Number(process.env.PORT) || 3001
+    await app.listen({ port, host: '0.0.0.0' })
+    app.log.info(`Servidor rodando na porta ${port}`)
+    app.log.info(`Documentação API: http://localhost:${port}/docs`)
   } catch (err) {
     app.log.error(err)
     process.exit(1)
