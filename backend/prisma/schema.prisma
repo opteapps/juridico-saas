@@ -31,11 +31,27 @@ model Plano {
 model Tenant {
   id             String       @id @default(uuid())
   nome           String
+  nomeFantasia   String?
   cnpj           String?      @unique
+  inscricaoEstadual String?
+  inscricaoMunicipal String?
   email          String       @unique
   telefone       String?
+  celular        String?
   endereco       String?
+  cidade         String?
+  estado         String?
+  cep            String?
+  website        String?
   logoUrl        String?
+  
+  // OAB do escritório
+  oabEscritorio  String?
+  responsavelTecnicoId String?
+  
+  // Configurações
+  config         Json?        // Configurações diversas em JSON
+  
   planoId        String
   plano          Plano        @relation(fields: [planoId], references: [id])
   ativo          Boolean      @default(true)
@@ -52,6 +68,14 @@ model Tenant {
   notificacoes   Notificacao[]
   assinaturas    Assinatura[]
   auditLogs      AuditLog[]
+  unidades       Unidade[]
+  areasAtuacao   AreaAtuacao[]
+  especialidades Especialidade[]
+  equipes        Equipe[]
+  centrosCusto   CentroCusto[]
+  modelosContrato ModeloContrato[]
+  modelosTarefa  ModeloTarefa[]
+  configuracoes  ConfiguracaoEscritorio[]
 
   @@map("tenants")
 }
@@ -61,6 +85,7 @@ model Unidade {
   tenantId    String
   tenant      Tenant    @relation(fields: [tenantId], references: [id])
   nome        String
+  codigo      String?   // Código interno da unidade
   endereco    String?
   cidade      String?
   estado      String?
@@ -75,6 +100,150 @@ model Unidade {
   usuarios    Usuario[]
 
   @@map("unidades")
+}
+
+// ==================== CADASTRO MESTRE ====================
+
+model AreaAtuacao {
+  id          String    @id @default(uuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  nome        String
+  descricao   String?
+  cor         String?   // Cor para identificação visual
+  icone       String?   // Ícone/emoji
+  ativa       Boolean   @default(true)
+  ordem       Int       @default(0)
+  criadoEm   DateTime  @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  especialidades Especialidade[]
+  processos      Processo[]
+
+  @@unique([nome, tenantId])
+  @@map("areas_atuacao")
+}
+
+model Especialidade {
+  id             String        @id @default(uuid())
+  tenantId       String
+  tenant         Tenant        @relation(fields: [tenantId], references: [id])
+  areaAtuacaoId  String
+  areaAtuacao    AreaAtuacao   @relation(fields: [areaAtuacaoId], references: [id])
+  nome           String
+  descricao      String?
+  ativa          Boolean       @default(true)
+  ordem          Int           @default(0)
+  criadoEm      DateTime      @default(now())
+  atualizadoEm  DateTime      @updatedAt
+
+  @@unique([nome, areaAtuacaoId, tenantId])
+  @@map("especialidades")
+}
+
+model Equipe {
+  id          String    @id @default(uuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  nome        String
+  descricao   String?
+  liderId     String?   // Usuário líder da equipe
+  cor         String?
+  ativa       Boolean   @default(true)
+  criadoEm   DateTime  @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  membros     EquipeMembro[]
+
+  @@map("equipes")
+}
+
+model EquipeMembro {
+  id         String   @id @default(uuid())
+  equipeId   String
+  equipe     Equipe   @relation(fields: [equipeId], references: [id], onDelete: Cascade)
+  usuarioId  String
+  // Sem relação direta para evitar conflito de circular reference
+  funcao     String?  // Função na equipe
+  dataEntrada DateTime @default(now())
+  dataSaida   DateTime?
+
+  @@unique([equipeId, usuarioId])
+  @@map("equipe_membros")
+}
+
+model CentroCusto {
+  id          String    @id @default(uuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  codigo      String
+  nome        String
+  descricao   String?
+  tipo        String    // receita, despesa, investimento
+  paiId       String?
+  pai         CentroCusto? @relation("SubCentros", fields: [paiId], references: [id])
+  filhos      CentroCusto[] @relation("SubCentros")
+  ativo       Boolean   @default(true)
+  criadoEm   DateTime  @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@unique([codigo, tenantId])
+  @@map("centros_custo")
+}
+
+model ModeloContrato {
+  id          String    @id @default(uuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  nome        String
+  tipo        String    // prestacao_servicos, honorarios, etc
+  descricao   String?
+  conteudo    String    // Template do contrato
+  variaveis   Json?     // Variáveis disponíveis no template
+  areaAtuacaoId String?
+  ativo       Boolean   @default(true)
+  criadoEm   DateTime  @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@map("modelos_contrato")
+}
+
+model ModeloTarefa {
+  id          String    @id @default(uuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  nome        String
+  tipoAcao    String    // Tipo de ação/processual
+  descricao   String?
+  tarefas     Json      // Array de tarefas padrão
+  prazos      Json?     // Configuração de prazos
+  checklist   Json?     // Checklist de itens
+  areaAtuacaoId String?
+  ativo       Boolean   @default(true)
+  criadoEm   DateTime  @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@map("modelos_tarefa")
+}
+
+model ConfiguracaoEscritorio {
+  id                String    @id @default(uuid())
+  tenantId          String
+  tenant            Tenant    @relation(fields: [tenantId], references: [id])
+  
+  // Categoria da configuração
+  categoria         String    // geral, monitoramento, notificacoes, comissionamento, sla
+  chave             String    // nome da configuração
+  valor             Json      // valor da configuração
+  
+  // Descrição opcional
+  descricao         String?
+  
+  criadoEm         DateTime  @default(now())
+  atualizadoEm     DateTime  @updatedAt
+
+  @@unique([tenantId, categoria, chave])
+  @@map("configuracoes_escritorio")
 }
 
 model Assinatura {

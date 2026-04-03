@@ -114,6 +114,77 @@ export async function seedDatabase() {
   })
 
   console.log('Demo admin created:', demoAdmin.email)
+
+  // Criar áreas de atuação padrão
+  const areasAtuacao = await Promise.all([
+    prisma.areaAtuacao.upsert({
+      where: { id: '00000000-0000-0000-0000-000000000100' },
+      update: {},
+      create: {
+        id: '00000000-0000-0000-0000-000000000100',
+        tenantId: demoTenant.id,
+        nome: 'Direito Cível',
+        descricao: 'Processos cíveis em geral',
+        cor: '#2196F3',
+        ordem: 1,
+      },
+    }),
+    prisma.areaAtuacao.upsert({
+      where: { id: '00000000-0000-0000-0000-000000000101' },
+      update: {},
+      create: {
+        id: '00000000-0000-0000-0000-000000000101',
+        tenantId: demoTenant.id,
+        nome: 'Direito Trabalhista',
+        descricao: 'Processos trabalhistas',
+        cor: '#4CAF50',
+        ordem: 2,
+      },
+    }),
+    prisma.areaAtuacao.upsert({
+      where: { id: '00000000-0000-0000-0000-000000000102' },
+      update: {},
+      create: {
+        id: '00000000-0000-0000-0000-000000000102',
+        tenantId: demoTenant.id,
+        nome: 'Direito Previdenciário',
+        descricao: 'Processos previdenciários',
+        cor: '#FF9800',
+        ordem: 3,
+      },
+    }),
+  ])
+
+  console.log('Areas de atuacao created:', areasAtuacao.map(a => a.nome))
+
+  // Criar centros de custo padrão
+  const centrosCusto = await Promise.all([
+    prisma.centroCusto.upsert({
+      where: { id: '00000000-0000-0000-0000-000000000200' },
+      update: {},
+      create: {
+        id: '00000000-0000-0000-0000-000000000200',
+        tenantId: demoTenant.id,
+        codigo: 'RECEITA',
+        nome: 'Receitas',
+        tipo: 'receita',
+      },
+    }),
+    prisma.centroCusto.upsert({
+      where: { id: '00000000-0000-0000-0000-000000000201' },
+      update: {},
+      create: {
+        id: '00000000-0000-0000-0000-000000000201',
+        tenantId: demoTenant.id,
+        codigo: 'DESPESA',
+        nome: 'Despesas',
+        tipo: 'despesa',
+      },
+    }),
+  ])
+
+  console.log('Centros de custo created:', centrosCusto.map(c => c.nome))
+
   console.log('Seeding complete!')
 }
 
