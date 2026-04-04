@@ -460,7 +460,7 @@ export const authService = {
     const fingerprint = this.generateDeviceFingerprint(deviceInfo, userAgent)
 
     await prisma.dispositivo.updateMany({
-      where: { usuarioId, fingerprint },
+      where: { usuarioId: userId, fingerprint },
       data: {
         ultimoAcesso: new Date(),
         ipUltimo: ipAddress,
