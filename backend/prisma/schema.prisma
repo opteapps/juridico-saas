@@ -124,7 +124,6 @@ model AreaAtuacao {
   atualizadoEm DateTime @updatedAt
 
   especialidades Especialidade[]
-  processos      Processo[]
   leads          Lead[]
 
   @@unique([nome, tenantId])
@@ -161,6 +160,7 @@ model Equipe {
   atualizadoEm DateTime @updatedAt
 
   membros     EquipeMembro[]
+  usuarios    Usuario[]  // Relação inversa
 
   @@map("equipes")
 }
@@ -376,6 +376,9 @@ model Usuario {
   historicoProfissional HistoricoProfissional[]
   metas               MetaUsuario[]
   produtividade       Produtividade[]
+  leadsResponsavel    Lead[]     @relation("LeadResponsavel")
+  atendimentos        Atendimento[]
+  propostasElaboradas PropostaComercial[]
 
   @@unique([email, tenantId])
   @@map("usuarios")
@@ -818,7 +821,7 @@ model Lead {
   
   // Responsáveis
   responsavelId     String?
-  responsavel       Usuario?  @relation(fields: [responsavelId], references: [id])
+  responsavel       Usuario?  @relation("LeadResponsavel", fields: [responsavelId], references: [id])
   distribuidoEm     DateTime?
   
   // Análise preliminar
