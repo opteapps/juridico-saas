@@ -42,7 +42,11 @@ export const authController = {
       const ipAddress = request.ip
       const userAgent = request.headers['user-agent']
 
+      console.log('Login attempt:', { email, ip: ipAddress })
+
       const result = await authService.login(email, senha, deviceInfo, ipAddress, userAgent)
+
+      console.log('Login result:', { success: result.success, requiresTwoFactor: result.requiresTwoFactor })
 
       // Se precisa de 2FA ou verificação de dispositivo
       if (result.requiresTwoFactor || result.requiresDeviceVerification) {
