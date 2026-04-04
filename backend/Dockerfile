@@ -2,8 +2,8 @@ FROM node:20-alpine
 WORKDIR /app
 
 # Build cache buster - alterar para forçar rebuild
-# Cache invalidation: 2026-04-04-002
-ARG CACHE_BUSTER=2026-04-04-002
+# Cache invalidation: 2026-04-04-003
+ARG CACHE_BUSTER=2026-04-04-003
 RUN echo "Cache bust: $CACHE_BUSTER"
 
 # Instala OpenSSL (necessário para Prisma)
