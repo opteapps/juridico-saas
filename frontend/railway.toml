@@ -10,4 +10,4 @@ restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
 
 [deploy.envVars]
-BACKEND_URL = "https://backend-production-1a34.up.railway.app"
+BACKEND_URL = "https://backend-production-3fa0.up.railway.app"
