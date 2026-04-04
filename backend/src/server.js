@@ -30,6 +30,7 @@ import { wsHandler } from './modules/notificacoes/websocket.js'
 import { startJobs } from './jobs/index.js'
 import { cronJobs } from './jobs/cronJobs.js'
 import { errorHandler } from './middlewares/errorHandler.js'
+import { BUILD_INFO } from './config/buildInfo.js'
 
 const app = Fastify({
   logger: {
@@ -98,7 +99,14 @@ await app.register(equipeRoutes, { prefix: `${apiPrefix}/equipe` })
 await app.register(crmRoutes, { prefix: `${apiPrefix}/crm` })
 
 // Health check
-app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString(), version: '2.0.0' }))
+app.get('/health', async () => ({ 
+  status: 'ok', 
+  timestamp: new Date().toISOString(), 
+  version: BUILD_INFO.version,
+  buildDate: BUILD_INFO.buildDate,
+  commit: BUILD_INFO.commit,
+  modules: BUILD_INFO.modules
+}))
 
 // Seed endpoint — protegido por secret, uso único
 app.post('/setup/seed', async (request, reply) => {
