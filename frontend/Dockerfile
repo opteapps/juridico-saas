@@ -2,6 +2,10 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
+# Cache buster
+ARG CACHE_BUSTER=2026-04-04-004
+RUN echo "Cache bust: $CACHE_BUSTER"
+
 COPY package*.json ./
 RUN npm ci
 
