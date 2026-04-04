@@ -2,8 +2,9 @@ FROM node:20-alpine
 WORKDIR /app
 
 # Build cache buster - alterar para forçar rebuild
-ARG BUILD_DATE=2026-04-04
-ARG BUILD_COMMIT=4b9b281
+# Cache invalidation: 2026-04-04-001
+ARG CACHE_BUSTER=2026-04-04-001
+RUN echo "Cache bust: $CACHE_BUSTER"
 
 # Instala OpenSSL (necessário para Prisma)
 RUN apk add --no-cache openssl
@@ -16,11 +17,8 @@ RUN npm ci
 # Gera o Prisma Client
 RUN npx prisma generate
 
-# Copia o restante do código
+# Copia o restante do código - esta camada muda sempre
 COPY . .
-
-# Exibe info do build
-RUN echo "Build: $BUILD_DATE - $BUILD_COMMIT"
 
 EXPOSE 3001
 
