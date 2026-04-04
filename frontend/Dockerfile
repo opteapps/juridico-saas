@@ -3,7 +3,7 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Cache buster
-ARG CACHE_BUSTER=2026-04-04-005
+ARG CACHE_BUSTER=2026-04-04-006
 RUN echo "Cache bust: $CACHE_BUSTER"
 
 COPY package*.json ./
@@ -20,11 +20,11 @@ RUN npm run build
 # Stage 2: Serve com nginx
 FROM nginx:alpine
 
-# Remove a configuração padrão do nginx
-RUN rm /etc/nginx/conf.d/default.conf
+# Remove configurações padrão
+RUN rm -f /etc/nginx/conf.d/*
 
 COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx.conf /etc/nginx/nginx.conf
 
 EXPOSE 80
 
