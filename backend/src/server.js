@@ -125,21 +125,51 @@ app.post('/setup/seed', async (request, reply) => {
   }
 })
 
+// Diagnóstico do banco — verifica se há dados
+app.get('/setup/diagnostico', async (request, reply) => {
+  try {
+    const [totalPlanos, totalUsuarios, totalTenants] = await Promise.all([
+      prisma.plano.count(),
+      prisma.usuario.count(),
+      prisma.tenant.count(),
+    ])
+    
+    const usuarios = await prisma.usuario.findMany({
+      select: { id: true, email: true, role: true, ativo: true, tenantId: true },
+      take: 10,
+    })
+    
+    return {
+      banco: { totalPlanos, totalUsuarios, totalTenants },
+      usuarios,
+      timestamp: new Date().toISOString(),
+    }
+  } catch (err) {
+    return reply.status(500).send({ error: err.message })
+  }
+})
+
 // Error handler
 app.setErrorHandler(errorHandler)
 
 // Seed automático na primeira execução
 async function seedSeNecessario() {
   try {
-    const totalPlanos = await prisma.plano.count()
-    if (totalPlanos === 0) {
-      app.log.info('Banco vazio — executando seed inicial...')
+    const [totalPlanos, totalUsuarios] = await Promise.all([
+      prisma.plano.count(),
+      prisma.usuario.count(),
+    ])
+    
+    if (totalPlanos === 0 || totalUsuarios === 0) {
+      app.log.info('Banco vazio ou sem usuários — executando seed inicial...')
       const { seedDatabase } = await import('./database/seeds/index.js')
       await seedDatabase()
       app.log.info('Seed concluído com sucesso')
+    } else {
+      app.log.info(`Banco já populado: ${totalPlanos} planos, ${totalUsuarios} usuários`)
     }
   } catch (err) {
-    app.log.warn('Seed automático falhou (pode já ter sido executado):', err.message)
+    app.log.warn('Seed automático falhou:', err.message)
   }
 }
 

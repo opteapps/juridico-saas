@@ -15,11 +15,15 @@ export const authService = {
    * Retorna tokens se sucesso, ou informação sobre 2FA se necessário
    */
   async login(email, senha, deviceInfo, ipAddress, userAgent) {
+    console.log('[AuthService] Iniciando login para:', email)
+    
     // Busca usuário
     const usuario = await prisma.usuario.findFirst({
       where: { email: email.toLowerCase() },
       include: { tenant: true, dispositivos: true },
     })
+
+    console.log('[AuthService] Usuário encontrado:', usuario ? 'Sim' : 'Não')
 
     if (!usuario) {
       await auditService.log(null, 'LOGIN_FAILED', 'Usuario', null, { email, reason: 'user_not_found', ip: ipAddress })
@@ -39,7 +43,9 @@ export const authService = {
     }
 
     // Verifica senha
+    console.log('[AuthService] Verificando senha...')
     const senhaValida = await bcrypt.compare(senha, usuario.senha)
+    console.log('[AuthService] Senha válida:', senhaValida)
     
     if (!senhaValida) {
       // Incrementa tentativas falhas
