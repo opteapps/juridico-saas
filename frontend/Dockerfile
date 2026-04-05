@@ -3,7 +3,7 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Cache buster
-ARG CACHE_BUSTER=2026-04-04-007
+ARG CACHE_BUSTER=2026-04-04-008
 RUN echo "Cache bust: $CACHE_BUSTER"
 
 COPY package*.json ./
@@ -25,10 +25,7 @@ RUN rm -f /etc/nginx/conf.d/*
 
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/nginx.conf
-COPY docker-entrypoint.sh /docker-entrypoint.sh
-
-RUN chmod +x /docker-entrypoint.sh
 
 EXPOSE 80
 
-ENTRYPOINT ["/docker-entrypoint.sh"]
+CMD ["nginx", "-g", "daemon off;"]
