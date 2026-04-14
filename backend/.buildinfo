@@ -1,0 +1,4 @@
+# Build Info - Alterar para forçar rebuild
+BUILD_DATE=2026-04-04T01:00:00Z
+BUILD_NUMBER=001
+COMMIT_HASH=7ae1ee5

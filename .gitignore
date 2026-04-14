@@ -1,0 +1,28 @@
+# Dependências
+node_modules/
+npm-debug.log*
+
+# Ambiente
+.env
+backend/.env
+frontend/.env
+
+# Banco SQLite (apenas desenvolvimento local)
+backend/prisma/dev.db
+backend/prisma/*.db
+backend/prisma/*.db-journal
+
+# Build
+dist/
+frontend/dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Uploads locais
+uploads/
