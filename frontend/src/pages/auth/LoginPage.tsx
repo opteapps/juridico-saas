@@ -24,11 +24,7 @@ export function LoginPage() {
   const navigate = useNavigate()
   const { toast } = useToast()
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<LoginForm>({
+  const { register, handleSubmit, formState: { errors } } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
   })
 
@@ -94,12 +90,7 @@ export function LoginPage() {
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
             <div>
               <label className="text-sm font-medium mb-1.5 block">Email</label>
-              <Input
-                type="email"
-                placeholder="seu@email.com"
-                {...register('email')}
-                className={errors.email ? 'border-destructive' : ''}
-              />
+              <Input type="email" placeholder="seu@email.com" {...register('email')} className={errors.email ? 'border-destructive' : ''} />
               {errors.email && <p className="text-destructive text-xs mt-1">{errors.email.message}</p>}
             </div>
 
@@ -112,11 +103,7 @@ export function LoginPage() {
                   {...register('senha')}
                   className={errors.senha ? 'border-destructive pr-10' : 'pr-10'}
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>

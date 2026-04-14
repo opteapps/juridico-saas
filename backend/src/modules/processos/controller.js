@@ -1,128 +1,126 @@
-import { prisma } from '../../database/prisma.js'
-import { z } from 'zod'
-import { consultarDataJud } from '../../integrations/tribunais/datajud.js'
+const { z } = require('zod')
+const prisma = require('../../database/prisma')
 
 const processoSchema = z.object({
-  numero: z.string().min(20),
-  tribunal: z.string().optional(),
-  vara: z.string().optional(),
-  forum: z.string().optional(),
-  juiz: z.string().optional(),
-  area: z.string().optional(),
-  assunto: z.string().optional(),
-  valorCausa: z.number().optional(),
-  status: z.enum(['ativo', 'suspenso', 'encerrado', 'arquivado']).default('ativo'),
-  descricao: z.string().optional(),
-  observacoes: z.string().optional(),
-  dadosAdicionais: z.any().optional(),
-  clienteIds: z.array(z.string().uuid()).optional(),
-  advogadoIds: z.array(z.string().uuid()).optional(),
-  monitoramentoAtivo: z.boolean().default(true),
+  numero: z.string().min(20).optional(),
+  tribunal: z.string().optional().nullable(),
+  vara: z.string().optional().nullable(),
+  forum: z.string().optional().nullable(),
+  juiz: z.string().optional().nullable(),
+  area: z.string().optional().nullable(),
+  assunto: z.string().optional().nullable(),
+  valorCausa: z.number().optional().nullable(),
+  descricao: z.string().optional().nullable(),
+  observacoes: z.string().optional().nullable(),
+  status: z.enum(['ativo', 'suspenso', 'encerrado', 'arquivado']).optional(),
+  monitoramentoAtivo: z.boolean().optional(),
+  clienteIds: z.array(z.string()).optional(),
+  advogadoIds: z.array(z.string()).optional(),
 })
 
-export const processoController = {
-  async listar(request, reply) {
+function formatarNumeroCNJ(numero) {
+  const n = String(numero || '').replace(/\D/g, '')
+  if (n.length !== 20) return numero
+  return `${n.slice(0, 7)}-${n.slice(7, 9)}.${n.slice(9, 13)}.${n.slice(13, 14)}.${n.slice(14, 16)}.${n.slice(16)}`
+}
+
+module.exports = {
+  async listar(request) {
     const { tenantId } = request.usuario
-    const { busca, status, area, advogadoId, clienteId, page = 1, limit = 20 } = request.query
-    
+    const { busca = '', limit = 20, page = 1 } = request.query
+    const skip = (Number(page) - 1) * Number(limit)
+
     const where = {
       tenantId,
-      ...(status ? { status } : {}),
-      ...(area ? { area } : {}),
       ...(busca ? {
         OR: [
           { numero: { contains: busca } },
+          { numeroFormatado: { contains: busca } },
           { assunto: { contains: busca, mode: 'insensitive' } },
-          { vara: { contains: busca, mode: 'insensitive' } },
-          { juiz: { contains: busca, mode: 'insensitive' } },
         ],
       } : {}),
-      ...(advogadoId ? { advogados: { some: { usuarioId: advogadoId } } } : {}),
-      ...(clienteId ? { clientes: { some: { clienteId } } } : {}),
     }
-    
-    const [total, processos] = await Promise.all([
-      prisma.processo.count({ where }),
+
+    const [processos, total] = await Promise.all([
       prisma.processo.findMany({
         where,
-        skip: (page - 1) * limit,
-        take: Number(limit),
-        orderBy: { atualizadoEm: 'desc' },
         include: {
-          clientes: { include: { cliente: { select: { id: true, nome: true } } } },
-          advogados: { include: { usuario: { select: { id: true, nome: true } } } },
-          _count: { select: { movimentacoes: true, prazos: true } },
+          clientes: { include: { cliente: true } },
+          advogados: { include: { usuario: true } },
         },
+        orderBy: { criadoEm: 'desc' },
+        skip,
+        take: Number(limit),
       }),
+      prisma.processo.count({ where }),
     ])
-    
-    return { processos, total, page: Number(page), pages: Math.ceil(total / limit) }
+
+    return { processos, total }
   },
 
-  async buscar(request, reply) {
+  async obter(request, reply) {
     const { id } = request.params
     const { tenantId } = request.usuario
-    
+
     const processo = await prisma.processo.findFirst({
       where: { id, tenantId },
       include: {
         clientes: { include: { cliente: true } },
-        advogados: { include: { usuario: { select: { id: true, nome: true, oab: true, avatarUrl: true } } } },
-        movimentacoes: { orderBy: { data: 'desc' }, take: 5 },
-        prazos: { where: { status: 'pendente' }, orderBy: { dataVencimento: 'asc' } },
-        diligencias: { where: { status: { not: 'concluida' } } },
+        advogados: { include: { usuario: true } },
+        movimentacoes: { orderBy: { data: 'desc' }, take: 10 },
+        prazos: { orderBy: { dataVencimento: 'asc' } },
         _count: { select: { movimentacoes: true, documentos: true } },
       },
     })
-    
-    if (!processo) return reply.status(404).send({ error: 'Processo não encontrado' })
+
+    if (!processo) {
+      return reply.code(404).send({ error: 'Processo não encontrado' })
+    }
+
     return processo
   },
 
   async criar(request, reply) {
     const { tenantId, id: usuarioId } = request.usuario
     const data = processoSchema.parse(request.body)
-    const { clienteIds, advogadoIds, ...processoData } = data
-    
+    const { clienteIds = [], advogadoIds = [], ...processoData } = data
+
     const processo = await prisma.$transaction(async (tx) => {
-      const p = await tx.processo.create({
+      const criado = await tx.processo.create({
         data: {
           ...processoData,
           tenantId,
-          numeroFormatado: formatarNumeroCNJ(processoData.numero),
-          clientes: clienteIds ? {
-            create: clienteIds.map(clienteId => ({ clienteId })),
-          } : undefined,
-          advogados: {
-            create: [
-              { usuarioId, principal: true },
-              ...(advogadoIds?.filter(id => id !== usuarioId).map(id => ({ usuarioId: id })) || []),
-            ],
-          },
+          numeroFormatado: processoData.numero ? formatarNumeroCNJ(processoData.numero) : null,
         },
       })
-      
-      await tx.auditLog.create({
-        data: { tenantId, usuarioId, acao: 'CREATE', entidade: 'Processo', entidadeId: p.id },
-      })
-      
-      return p
-    })
-    
-    // Trigger monitoring job
-    if (processo.monitoramentoAtivo) {
-      try {
-        const { processoMonitoramentoQueue } = await import('../../jobs/index.js')
-        await processoMonitoramentoQueue.add('consultar', { processoId: processo.id, numero: processo.numero }, { priority: 1 })
-      } catch (e) {
-        console.warn('Could not queue monitoring job:', e.message)
+
+      if (clienteIds.length > 0) {
+        await tx.clienteProcesso.createMany({
+          data: clienteIds.map((clienteId) => ({ clienteId, processoId: criado.id })),
+        })
       }
-    }
-    
-    return reply.status(201).send(processo)
+
+      if (advogadoIds.length > 0) {
+        await tx.advogadoProcesso.createMany({
+          data: advogadoIds.map((advogadoId, index) => ({
+            usuarioId: advogadoId,
+            processoId: criado.id,
+            principal: index === 0,
+          })),
+        })
+      }
+
+      await tx.auditLog.create({
+        data: { tenantId, usuarioId, acao: 'CREATE', entidade: 'Processo', entidadeId: criado.id },
+      })
+
+      return criado
+    })
+
+    return reply.code(201).send(processo)
   },
 
-  async atualizar(request, reply) {
+  async atualizar(request) {
     const { id } = request.params
     const { tenantId, id: usuarioId } = request.usuario
     const data = processoSchema.partial().parse(request.body)
@@ -170,76 +168,8 @@ export const processoController = {
   async excluir(request, reply) {
     const { id } = request.params
     const { tenantId } = request.usuario
-    
-    await prisma.processo.updateMany({ where: { id, tenantId }, data: { status: 'arquivado' } })
-    return { message: 'Processo arquivado' }
-  },
 
-  async movimentacoes(request, reply) {
-    const { id } = request.params
-    const { tenantId } = request.usuario
-    const { page = 1, limit = 30 } = request.query
-    
-    const where = { processoId: id, processo: { tenantId } }
-    
-    const [total, movimentacoes] = await Promise.all([
-      prisma.movimentacao.count({ where }),
-      prisma.movimentacao.findMany({
-        where,
-        skip: (page - 1) * limit,
-        take: Number(limit),
-        orderBy: { data: 'desc' },
-      }),
-    ])
-    
-    return { movimentacoes, total, page: Number(page) }
+    await prisma.processo.deleteMany({ where: { id, tenantId } })
+    return reply.code(204).send()
   },
-
-  async prazos(request, reply) {
-    const { id } = request.params
-    const { tenantId } = request.usuario
-    
-    const prazos = await prisma.prazo.findMany({
-      where: { processoId: id, processo: { tenantId } },
-      orderBy: { dataVencimento: 'asc' },
-    })
-    
-    return prazos
-  },
-
-  async ativarMonitoramento(request, reply) {
-    const { id } = request.params
-    const { tenantId } = request.usuario
-    const { ativo } = request.body
-    
-    await prisma.processo.updateMany({
-      where: { id, tenantId },
-      data: { monitoramentoAtivo: ativo },
-    })
-    
-    return { message: `Monitoramento ${ativo ? 'ativado' : 'desativado'}` }
-  },
-
-  async buscarPorNumero(request, reply) {
-    const { numero } = request.body
-    const { tenantId } = request.usuario
-    
-    // Search locally first
-    const local = await prisma.processo.findFirst({ where: { numero, tenantId } })
-    if (local) return { encontrado: true, fonte: 'local', processo: local }
-    
-    // Search DataJud
-    try {
-      const resultado = await consultarDataJud(numero)
-      return { encontrado: !!resultado, fonte: 'datajud', dados: resultado }
-    } catch (e) {
-      return { encontrado: false, erro: 'Erro ao consultar tribunal' }
-    }
-  },
-}
-
-function formatarNumeroCNJ(numero) {
-  const n = numero.replace(/\D/g, '')
-  if (n.length !== 20) return numero
-  return `${n.slice(0,7)}-${n.slice(7,9)}.${n.slice(9,13)}.${n.slice(13,14)}.${n.slice(14,16)}.${n.slice(16)}`
 }

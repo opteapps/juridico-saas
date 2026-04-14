@@ -48,16 +48,10 @@ export function PortalClientePage() {
             </div>
 
             <div className="mt-8 flex flex-wrap gap-3">
-              <a
-                href="/login"
-                className="inline-flex items-center justify-center rounded-lg bg-white px-6 py-2.5 text-sm font-semibold text-blue-900 transition-colors hover:bg-blue-50"
-              >
+              <a href="/login" className="inline-flex items-center justify-center rounded-lg bg-white px-6 py-2.5 text-sm font-semibold text-blue-900 transition-colors hover:bg-blue-50">
                 Área do Advogado
               </a>
-              <a
-                href="mailto:suporte@juridicosaas.com.br"
-                className="inline-flex items-center justify-center rounded-lg border border-white/20 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-white/10"
-              >
+              <a href="mailto:suporte@juridicosaas.com.br" className="inline-flex items-center justify-center rounded-lg border border-white/20 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-white/10">
                 Solicitar acesso
               </a>
             </div>

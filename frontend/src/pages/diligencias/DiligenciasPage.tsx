@@ -65,7 +65,9 @@ export function DiligenciasPage() {
       toast({ title: diligenciaEditando ? 'Diligência atualizada' : 'Diligência criada' })
       resetForm()
     },
-    onError: () => toast({ variant: 'destructive', title: 'Erro ao salvar diligência' }),
+    onError: () => {
+      toast({ variant: 'destructive', title: 'Erro ao salvar diligência' })
+    },
   })
 
   const concluirMutation = useMutation({

@@ -24,11 +24,7 @@ export function RegisterPage() {
   const navigate = useNavigate()
   const { toast } = useToast()
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<RegisterForm>({
+  const { register, handleSubmit, formState: { errors } } = useForm<RegisterForm>({
     resolver: zodResolver(registerSchema),
   })
 
@@ -72,24 +68,20 @@ export function RegisterPage() {
               <Input placeholder="Escritório Silva & Advogados" {...register('nomeEscritorio')} />
               {errors.nomeEscritorio && <p className="text-destructive text-xs mt-1">{errors.nomeEscritorio.message}</p>}
             </div>
-
             <div>
               <label className="text-sm font-medium mb-1.5 block">Seu nome *</label>
               <Input placeholder="Dr. João Silva" {...register('nome')} />
               {errors.nome && <p className="text-destructive text-xs mt-1">{errors.nome.message}</p>}
             </div>
-
             <div>
               <label className="text-sm font-medium mb-1.5 block">CNPJ</label>
               <Input placeholder="00.000.000/0000-00" {...register('cnpj')} />
             </div>
-
             <div className="sm:col-span-2">
               <label className="text-sm font-medium mb-1.5 block">Email *</label>
               <Input type="email" placeholder="contato@escritorio.com" {...register('email')} />
               {errors.email && <p className="text-destructive text-xs mt-1">{errors.email.message}</p>}
             </div>
-
             <div className="sm:col-span-2">
               <label className="text-sm font-medium mb-1.5 block">Senha *</label>
               <Input type="password" placeholder="Mínimo de 8 caracteres" {...register('senha')} />

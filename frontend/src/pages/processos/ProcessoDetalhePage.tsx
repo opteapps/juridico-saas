@@ -3,9 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { formatarNumeroCNJ, formatarData, formatarMoeda, STATUS_PROCESSO } from '@/lib/utils'
+import { formatarNumeroCNJ, formatarData, formatarMoeda, STATUS_PROCESSO, cn } from '@/lib/utils'
 import { ArrowLeft, Users, AlertTriangle, Edit, Archive } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
 
 export function ProcessoDetalhePage() {
@@ -32,11 +31,7 @@ export function ProcessoDetalhePage() {
   })
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-muted-foreground">Carregando...</div>
-      </div>
-    )
+    return <div className="flex items-center justify-center h-64"><div className="text-muted-foreground">Carregando...</div></div>
   }
 
   if (!processo) {

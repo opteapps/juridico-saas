@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from '@/store/auth'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { SuperAdminLayout } from '@/components/layout/SuperAdminLayout'
@@ -17,51 +17,39 @@ import { AgendaPage } from '@/pages/agenda/AgendaPage'
 import { FinanceiroPage } from '@/pages/financeiro/FinanceiroPage'
 import { DocumentosPage } from '@/pages/documentos/DocumentosPage'
 import { DiligenciasPage } from '@/pages/diligencias/DiligenciasPage'
+import { ConfiguracoesPage } from '@/pages/configuracoes/ConfiguracoesPage'
 import { IAPage } from '@/pages/ia/IAPage'
 import { JurimetriaPage } from '@/pages/jurimetria/JurimetriaPage'
 import { UsuariosPage } from '@/pages/usuarios/UsuariosPage'
-import { ConfiguracoesPage } from '@/pages/configuracoes/ConfiguracoesPage'
 import { PortalClientePage } from '@/pages/portal-cliente/PortalClientePage'
 import { SADashboardPage } from '@/pages/superadmin/SADashboardPage'
 import { SAEscritoriosPage } from '@/pages/superadmin/SAEscritoriosPage'
+import { SAEscritorioDetalhePage } from '@/pages/superadmin/SAEscritorioDetalhePage'
 import { SACobrancasPage } from '@/pages/superadmin/SACobrancasPage'
+import { SAPlanosPage } from '@/pages/superadmin/SAPlanosPage'
 import { SAAuditoriaPage } from '@/pages/superadmin/SAAuditoriaPage'
 import { SALGPDPage } from '@/pages/superadmin/SALGPDPage'
-import { SAPlanosPage } from '@/pages/superadmin/SAPlanosPage'
-import { SAEscritorioDetalhePage } from '@/pages/superadmin/SAEscritorioDetalhePage'
 import { Toaster } from '@/components/ui/toaster'
 
-function EmDesenvolvimento({ titulo }: { titulo: string }) {
-  return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold text-gray-900 mb-2">{titulo}</h1>
-      <p className="text-gray-500">Em desenvolvimento</p>
-    </div>
-  )
+function PrivateRoute({ children }: { children: JSX.Element }) {
+  const { accessToken } = useAuthStore()
+  return accessToken ? children : <Navigate to="/login" replace />
 }
 
-function PrivateRoute({ children }: { children: React.ReactNode }) {
-  const isAuthenticated = useAuthStore(s => s.isAuthenticated)
-  return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />
-}
-
-function SuperAdminRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, usuario } = useAuthStore()
-  if (!isAuthenticated) return <Navigate to="/login" replace />
-  if (usuario?.role !== 'super_admin') return <Navigate to="/" replace />
-  return <>{children}</>
+function SuperAdminRoute({ children }: { children: JSX.Element }) {
+  const { accessToken, usuario } = useAuthStore()
+  if (!accessToken) return <Navigate to="/login" replace />
+  return usuario?.role === 'super_admin' ? children : <Navigate to="/" replace />
 }
 
 export default function App() {
   return (
-    <>
+    <BrowserRouter>
       <Routes>
-        {/* Public routes */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/cadastro" element={<RegisterPage />} />
         <Route path="/portal-cliente" element={<PortalClientePage />} />
 
-        {/* Private routes */}
         <Route path="/" element={<PrivateRoute><AppLayout /></PrivateRoute>}>
           <Route index element={<DashboardPage />} />
           <Route path="processos" element={<ProcessosPage />} />
@@ -76,13 +64,12 @@ export default function App() {
           <Route path="financeiro" element={<FinanceiroPage />} />
           <Route path="documentos" element={<DocumentosPage />} />
           <Route path="diligencias" element={<DiligenciasPage />} />
+          <Route path="configuracoes" element={<ConfiguracoesPage />} />
           <Route path="ia" element={<IAPage />} />
           <Route path="jurimetria" element={<JurimetriaPage />} />
           <Route path="usuarios" element={<UsuariosPage />} />
-          <Route path="configuracoes" element={<ConfiguracoesPage />} />
         </Route>
 
-        {/* Super Admin */}
         <Route path="/super-admin" element={<SuperAdminRoute><SuperAdminLayout /></SuperAdminRoute>}>
           <Route index element={<SADashboardPage />} />
           <Route path="escritorios" element={<SAEscritoriosPage />} />
@@ -91,14 +78,9 @@ export default function App() {
           <Route path="planos" element={<SAPlanosPage />} />
           <Route path="auditoria" element={<SAAuditoriaPage />} />
           <Route path="lgpd" element={<SALGPDPage />} />
-          <Route path="usuarios-sistema" element={<EmDesenvolvimento titulo="Usuários do Sistema" />} />
-          <Route path="relatorios" element={<EmDesenvolvimento titulo="Relatórios" />} />
-          <Route path="configuracoes" element={<EmDesenvolvimento titulo="Configurações do Sistema" />} />
         </Route>
-
-        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <Toaster />
-    </>
+    </BrowserRouter>
   )
 }

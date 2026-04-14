@@ -14,9 +14,11 @@ import { ArrowLeft, Loader2 } from 'lucide-react'
 import { AREAS_ATUACAO } from '@/lib/utils'
 
 const novoProcessoSchema = z.object({
-  numero: z.string().min(20, 'Número CNJ inválido (mínimo 20 dígitos)'),
+  numero: z.string().min(20, 'Número CNJ inválido'),
   tribunal: z.string().optional(),
   vara: z.string().optional(),
+  forum: z.string().optional(),
+  juiz: z.string().optional(),
   area: z.string().optional(),
   assunto: z.string().optional(),
   valorCausa: z.number().optional(),
@@ -53,13 +55,17 @@ export function NovoProcessoPage() {
 
   const mutation = useMutation({
     mutationFn: (data: NovoProcessoForm) => api.post('/processos', data),
-    onSuccess: (res) => {
+    onSuccess: (response) => {
       queryClient.invalidateQueries({ queryKey: ['processos'] })
-      toast({ title: 'Processo criado!', description: 'O processo foi adicionado com sucesso.' })
-      navigate(`/processos/${res.data.id}`)
+      toast({ title: 'Processo criado com sucesso' })
+      navigate(`/processos/${response.data.id}`)
     },
-    onError: (err: any) => {
-      toast({ variant: 'destructive', title: 'Erro', description: err.response?.data?.error || 'Tente novamente' })
+    onError: (error: any) => {
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao criar processo',
+        description: error.response?.data?.error || 'Tente novamente',
+      })
     },
   })
 
@@ -80,58 +86,58 @@ export function NovoProcessoPage() {
         </Button>
         <div>
           <h1 className="text-2xl font-bold">Novo Processo</h1>
-          <p className="text-muted-foreground">Cadastre um novo processo no sistema</p>
+          <p className="text-muted-foreground">Cadastre um novo processo judicial</p>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit(d => mutation.mutate(d))}>
+      <form onSubmit={handleSubmit((data) => mutation.mutate(data))} className="space-y-6">
         <Card>
-          <CardHeader><CardTitle className="text-base">Dados do Processo</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-base">Dados do processo</CardTitle></CardHeader>
           <CardContent className="space-y-5">
             <div>
               <label className="text-sm font-medium mb-1.5 block">Número CNJ *</label>
-              <Input
-                placeholder="00000000-00.0000.0.00.0000"
-                {...register('numero')}
-                className={errors.numero ? 'border-destructive' : ''}
-              />
+              <Input {...register('numero')} className={errors.numero ? 'border-destructive' : ''} />
               {errors.numero && <p className="text-destructive text-xs mt-1">{errors.numero.message}</p>}
-              <p className="text-xs text-muted-foreground mt-1">Formato: NNNNNNN-DD.AAAA.J.TT.OOOO (20 dígitos sem formatação)</p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium mb-1.5 block">Tribunal</label>
-                <Input placeholder="TJSP, TRF3, TRT2..." {...register('tribunal')} />
+                <Input {...register('tribunal')} />
               </div>
               <div>
                 <label className="text-sm font-medium mb-1.5 block">Vara</label>
-                <Input placeholder="1ª Vara Cível" {...register('vara')} />
+                <Input {...register('vara')} />
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium mb-1.5 block">Área</label>
-                <select className="h-10 w-full px-3 rounded-md border border-input bg-background text-sm" {...register('area')}>
-                  <option value="">Selecione...</option>
-                  {AREAS_ATUACAO.map(a => <option key={a} value={a}>{a}</option>)}
-                </select>
+                <label className="text-sm font-medium mb-1.5 block">Fórum</label>
+                <Input {...register('forum')} />
               </div>
               <div>
-                <label className="text-sm font-medium mb-1.5 block">Valor da Causa (R$)</label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  placeholder="0,00"
-                  {...register('valorCausa', { valueAsNumber: true })}
-                />
+                <label className="text-sm font-medium mb-1.5 block">Juiz</label>
+                <Input {...register('juiz')} />
               </div>
             </div>
 
-            <div>
-              <label className="text-sm font-medium mb-1.5 block">Assunto</label>
-              <Input placeholder="Ação de cobrança, indenização..." {...register('assunto')} />
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="text-sm font-medium mb-1.5 block">Área</label>
+                <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" {...register('area')}>
+                  <option value="">Selecione...</option>
+                  {AREAS_ATUACAO.map((area) => <option key={area} value={area}>{area}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1.5 block">Assunto</label>
+                <Input {...register('assunto')} />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1.5 block">Valor da causa</label>
+                <Input type="number" step="0.01" {...register('valorCausa', { valueAsNumber: true })} />
+              </div>
             </div>
 
             <div>
@@ -160,9 +166,7 @@ export function NovoProcessoPage() {
                       key={cliente.id}
                       type="button"
                       onClick={() => toggleSelecao('clienteIds', cliente.id)}
-                      className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                        ativo ? 'border-primary bg-primary text-primary-foreground' : 'border-input bg-background'
-                      }`}
+                      className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${ativo ? 'border-primary bg-primary text-primary-foreground' : 'border-input bg-background'}`}
                     >
                       {cliente.nome}
                     </button>
@@ -187,9 +191,7 @@ export function NovoProcessoPage() {
                       key={usuario.id}
                       type="button"
                       onClick={() => toggleSelecao('advogadoIds', usuario.id)}
-                      className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                        ativo ? 'border-primary bg-primary text-primary-foreground' : 'border-input bg-background'
-                      }`}
+                      className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${ativo ? 'border-primary bg-primary text-primary-foreground' : 'border-input bg-background'}`}
                     >
                       {usuario.nome}
                     </button>
@@ -211,7 +213,9 @@ export function NovoProcessoPage() {
         </Card>
 
         <div className="flex justify-end gap-3 mt-6">
-          <Button type="button" variant="outline" onClick={() => navigate('/processos')}>Cancelar</Button>
+          <Button type="button" variant="outline" onClick={() => navigate('/processos')}>
+            Cancelar
+          </Button>
           <Button type="submit" disabled={mutation.isPending}>
             {mutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
             Criar Processo
